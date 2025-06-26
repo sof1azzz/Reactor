@@ -5,8 +5,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-void log(const std::string &message,
-         const std::string &func,
+void log(const std::string &message, const std::string &func,
          const std::experimental::source_location &location) {
   std::string filename = location.file_name();
   auto pos = filename.find_last_of("/\\");
@@ -17,8 +16,7 @@ void log(const std::string &message,
             << message << std::endl;
 }
 
-void logError(const std::string &message,
-              const std::string &func,
+void logError(const std::string &message, const std::string &func,
               const std::experimental::source_location &location) {
   log("Error: " + message, func, location);
 }

@@ -8,12 +8,10 @@
 
 #include <experimental/source_location>
 
-void log(const std::string &message,
-         const std::string &func,
+void log(const std::string &message, const std::string &func,
          const std::experimental::source_location &location =
              std::experimental::source_location::current());
-void logError(const std::string &message,
-              const std::string &func,
+void logError(const std::string &message, const std::string &func,
               const std::experimental::source_location &location =
                   std::experimental::source_location::current());
 
