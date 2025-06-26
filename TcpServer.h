@@ -1,0 +1,53 @@
+#pragma once
+
+#include "Callbacks.h"
+#include "EventLoop.h"
+#include "InetAddress.h"
+#include "Socket.h"
+#include "TcpConnection.h"
+#include <map>
+#include <memory>
+#include <string>
+
+class TcpConnection;
+
+class TcpServer {
+public:
+  TcpServer(const std::string &ip, const uint16_t port);
+  ~TcpServer();
+
+  void start();
+  void stop();
+
+  // 获取连接
+  std::shared_ptr<TcpConnection> getConnection(const std::string &name) {
+    return connections_[name];
+  }
+
+  // 设置回调函数
+  void setConnectionCallback(const TcpConnectionCallback &cb) {
+    connectionCallback_ = cb;
+  }
+  void setMessageCallback(const MessageCallback &cb) { messageCallback_ = cb; }
+  void setWriteCompleteCallback(const WriteCompleteCallback &cb) {
+    writeCompleteCallback_ = cb;
+  }
+  void setCloseCallback(const CloseCallback &cb) { closeCallback_ = cb; }
+
+  // 处理新连接
+private:
+  void handleNewConnection();
+
+private:
+  EventLoop *eventLoop_;
+  std::string ip_;
+  uint16_t port_;
+  Socket *listensock_;
+  Channel *listen_channel_;
+  TcpConnectionCallback connectionCallback_;
+  MessageCallback messageCallback_;
+  WriteCompleteCallback writeCompleteCallback_;
+  CloseCallback closeCallback_;
+  std::map<std::string, std::shared_ptr<TcpConnection>> connections_;
+  InetAddress server_addr_;
+};
