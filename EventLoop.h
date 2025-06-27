@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Epoll.h"
+#include <memory>
 
 class EventLoop {
 public:
@@ -10,5 +11,5 @@ public:
   Epoll *getEpoll() const;
 
 private:
-  Epoll *epoll_;
+  std::unique_ptr<Epoll> epoll_;
 };

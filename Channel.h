@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <sys/epoll.h>
 #include <unistd.h>
 
 #include <experimental/source_location>
@@ -34,6 +35,13 @@ public:
   uint32_t getReadEvent() const;
   void handleEvent();
   void setReadCallback(std::function<void()> callback);
+  void setCloseCallback(std::function<void()> callback);
+
+  void disableAll();
+
+  static const int kNoneEvent = 0;
+  static const int kReadEvent = EPOLLIN | EPOLLPRI;
+  static const int kWriteEvent = EPOLLOUT;
 
 private:
   int fd_;
@@ -42,4 +50,5 @@ private:
   uint32_t events_;
   uint32_t readEvent_;
   std::function<void()> readCallback_;
+  std::function<void()> closeCallback_;
 };

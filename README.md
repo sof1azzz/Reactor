@@ -1,166 +1,94 @@
-## My Reactor Patern (not fully implemented)
+# My Reactor Pattern 
+# 从notes里面翻译的
 
+## 1. main函数
 
-```
-让ai翻译的，自己整理在notes.txt
-```
+* 位于 `tcpepoll.cpp`
+* 根据命令行参数 `ip` 和 `port` 创建 `TcpServer` 类实例
 
-# TCP服务器事件处理流程
+---
 
-## 整体流程概述
+## 2. TcpServer 构造函数
 
-```
-main() 
-  ↓
-TcpServer::start() 
-  ↓
-EventLoop::run() 
-  ↓
-Epoll::loop() 
-  ↓
-Channel::handleEvent()
-```
+### 2.1 创建下列对象
 
-## 详细执行流程
+* `EventLoop`
+* `Socket`
+* `Channel`
+* `InetAddress`
+* `std::map` 管理所有 `TcpConnection`
 
-### 1. 程序启动阶段
+### 2.2 初始化 Socket
 
-```cpp
-// main函数中
-TcpServer tcpServer;
-tcpServer.start();  // 启动TCP服务器
-```
+* 调用 `bind()` `listen()` 等系统调用
 
-### 2. 事件循环启动
+### 2.3 设置 Channel 的回调
 
-```cpp
-// TcpServer::start() 内部调用
-eventLoop->run();
-```
+* 设置 `readCallback`
+* 调用 `enableReading()`
 
-### 3. Epoll事件监听
+  * 内部调用 `epoll_ctl` 添加 `EPOLLIN`
 
-```cpp
-// EventLoop::run() 内部
-vector<Channel*> activeChannels = epoll->loop();  // 获取活跃的Channel
-```
+---
 
-**重点**: 
-- `TcpConnection` 和 `TcpServer` 都会调用 `channel->enableReading()`
-- `enableReading()` 内部调用 `epoll_ctl`，将 `channel` 指针存储在 `epoll_event.data.ptr` 中
-- 因此在 `epoll->loop()` 中可以直接将 `epoll->events_[i].data.ptr` 转换为 `Channel*`
+## 3. main 函数继续
 
-### 4. 事件处理分发
+* 调用 `TcpServer::setXXXCallback()` 设置上层业务回调
+* 调用 `TcpServer::start()` 启动事件循环
 
-```cpp
-// EventLoop::run() 继续执行
-for (auto channel : activeChannels) {
-    channel->handleEvent();  // 处理每个活跃Channel的事件
-}
-```
+---
 
-## TcpServer的连接处理
+## 4. TcpServer::start()
 
-### 5. 监听Channel的设置
+* 调用 `EventLoop::run()`
+* 微观来看：
 
-```cpp
-// TcpServer构造函数中
-listenChannel->setReadCallback([this]() {
-    this->handleNewConnection();  // 设置读事件回调
-});
-```
+  * 调用 `epoll_wait()`
+  * 把系统监听到的 fd 封装成 `Channel`
+  * 对应调用 `Channel::handleEvent()`
 
-**流程**:
-- 对于 `TcpServer` 的 `listenChannel`，读事件会触发 `TcpServer::handleNewConnection()`
+---
 
-### 6. 新连接处理
+## 5. Channel::handleEvent()
 
-```cpp
-// TcpServer::handleNewConnection() 中
-void TcpServer::handleNewConnection() {
-    // 1. 创建新的TcpConnection
-    TcpConnectionPtr newConn = std::make_shared<TcpConnection>(...);
-    
-    // 2. 设置业务回调函数（从main传入的4个回调）
-    newConn->setConnectionCallback(connectionCallback_);
-    newConn->setMessageCallback(messageCallback_);
-    newConn->setWriteCompleteCallback(writeCompleteCallback_);
-    newConn->setCloseCallback(closeCallback_);
-    
-    // 3. 建立连接
-    newConn->connectEstablished();
-}
-```
+### 5.1 如果是 **读事件**：
 
-## TcpConnection的初始化
+#### 新连接：
 
-### 7. 连接建立过程
+1. 调用 `TcpServer::handleNewConnection()`
+2. 通过 `Socket` 获取客户端 fd
+3. 创建 `TcpConnection` 对象
+4. 加入 `TcpServer` 的 `map`，确保有效引用
+5. 设置 `TcpConnection` 的各种 Callback（其中 closeCallback 来自 main）
+6. 调用 `TcpConnection::connectEstablished()`
 
-```cpp
-// TcpConnection::connectEstablished() 中
-void TcpConnection::connectEstablished() {
-    // 1. 注册到Epoll
-    channel_->enableReading();  // 调用Epoll::updateChannel()
-    
-    // 2. 设置Channel的读回调为自己的handleRead
-    channel_->setReadCallback([this]() {
-        this->handleRead();
-    });
-    
-    // 3. 调用连接建立回调（业务层回调）
-    if (connectionCallback_) {
-        connectionCallback_(shared_from_this());  // 传入shared_ptr
-    }
-}
-```
+   * 设置 `handleRead()` 为读事件回调
+   * 通过 `epoll_ctl` 注册到 epoll 内核 red-black tree
 
-**关键点**:
-- `TcpConnection` 继承自 `std::enable_shared_from_this<TcpConnection>`
-- 可以安全地使用 `shared_from_this()` 获取自身的 `shared_ptr`
+#### 已经连接，执行读:
 
-### 8. 后续事件处理
+1. 调用 `TcpConnection::handleRead()`
+2. 使用 `Buffer` 和 `Socket` 处理数据
+3. 如果需要关闭，调用 closeCallback
 
-```mermaid
-graph TD
-    A[Epoll::loop 检测到读事件] --> B[EventLoop::run 获取activeChannels]
-    B --> C[调用 Channel::handleEvent]
-    C --> D[Channel::handleEvent 调用 readCallback_]
-    D --> E{判断Channel类型}
-    E -->|TcpServer的listenChannel| F[TcpServer::handleNewConnection]
-    E -->|TcpConnection的channel| G[TcpConnection::handleRead]
-    F --> H[创建新TcpConnection]
-    G --> I[处理客户端数据]
-```
+#### 关闭 TcpConnection
 
-## 回调函数的层次结构
+1. 设置回调时： `TcpServer::removeConnection`
+2. 如果观測到关闭：
 
-### 业务层回调（main设置）
-```cpp
-// main函数中设置的4个业务回调
-tcpServer.setConnectionCallback(onConnection);
-tcpServer.setMessageCallback(onMessage);
-tcpServer.setWriteCompleteCallback(onWriteComplete);
-tcpServer.setCloseCallback(onClose);
-```
+   * 关闭 fd
+   * 调用 `epoll_ctl` DEL 删除
+   * 从 `TcpServer` 的 map 删除
+3. 当 `TcpConnection` 引用计数为 0 时，自动释放所有内存
 
-### 网络层回调（框架内部）
-```cpp
-// TcpServer层面
-listenChannel->setReadCallback(TcpServer::handleNewConnection);
+---
 
-// TcpConnection层面  
-tcpConnection->channel_->setReadCallback(TcpConnection::handleRead);
-```
+### 5.2 写事件
 
-## 总结
+* 还未执行，...
 
-1. **启动阶段**: `main → TcpServer::start → EventLoop::run`
-2. **事件监听**: `Epoll::loop` 返回活跃的 `Channel` 列表
-3. **事件分发**: `EventLoop` 调用每个 `Channel::handleEvent`
-4. **连接处理**: 
-   - 监听Socket触发 `TcpServer::handleNewConnection`
-   - 创建 `TcpConnection` 并设置回调
-   - `TcpConnection::connectEstablished` 注册到Epoll
-5. **数据处理**: 客户端数据触发 `TcpConnection::handleRead`
+---
 
-整个架构通过回调函数和事件驱动实现了高效的异步网络编程模型。
+## 未完成
+
+* ...

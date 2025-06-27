@@ -61,8 +61,10 @@ uint32_t Channel::getReadEvent() const { return readEvent_; }
 void Channel::handleEvent() {
   if (events_ & EPOLLRDHUP) { // 客户端关闭连接
     log("Client disconnected", __func__);
-    close(fd_);
-    epoll_->delFd(fd_);
+    closeCallback_();
+    // 不要在这里关闭fd，调用回调去tcpconnection里面
+    // close(fd_);
+    // epoll_->delFd(fd_);
     return; // 客户端关闭连接，不需要处理其他事件
   }
 
@@ -77,6 +79,16 @@ void Channel::handleEvent() {
   }
 }
 
+void Channel::disableAll() {
+  events_ = kNoneEvent;
+  readEvent_ = kNoneEvent;
+  epoll_->updateChannel(this);
+}
+
 void Channel::setReadCallback(std::function<void()> callback) { // 设置读回调
   readCallback_ = callback;
+}
+
+void Channel::setCloseCallback(std::function<void()> callback) { // 设置关闭回调
+  closeCallback_ = callback;
 }

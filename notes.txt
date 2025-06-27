@@ -1,25 +1,78 @@
+流程：
+1. main函数在tcpepoll.cpp中，首先会根据命令行参数ip和port创建一个TcpServer类实例
+2. TcpServer构造函数中创建以下对象：
+    1. EventLoop,Socket,Channel,InetAddress,一个map管理所有的TcpConnetion连接
+    2. 同时会初始化这个Socket，进行listen,bind等系统调用
+    3. 给它的Channel设置回调，目前只有readCallback,并调用enableReading，里面还会调用对应的epoll_event的系统调用
+3. main函数继续，先设置上层的业务回调给TcpServer，然后调用TcpServer.start()开始事件循环
+4. TcpServer.start调用它的EventLoop.run()，进行处理系统调用epoll_wait()的返回值
+5. 每个事件封装成Channel类，然后调用每个Channel的handleEvent()
+    1. 读事件：
+        1. 调用Channel对应的读事件回调，该回调由TcpServer创建该Channel的时候设立，为TcpServer::handleNewConnection()
+        2. 强调：此时是首次连接。该回调首先通过TcpServer类里面的Socet获取该新连接客户端的fd，然后创建该客户端的TcpConnection
+        3. 把该TcpConnection加入TcpServer类里面的map，确保引用，同时初始化该TcpConnection的回调函数，来自于main的和close相关的
+        4. 进入TcpConnection:
+                1. 构造函数初始化
+                2. TcpServer调用它的connectEstablished()，把读事件的回调函数更新为TcpConnection::handleRead()
+                    把它的channel加入内核epoll红黑树等操作
+        5. 上面是首次连接，现在已经连接了，并且再次进入Channel的handleEvent，就会进入更后写回调函数TcpConnection::handleRead()
+        6. 通过TcpConnection的Buffer成员和Socket处理信息，同时会处理要关闭的情况
+        7. 关闭TcpConnection:
+            1. 补充，上面的TcpServer创建该TcpConnection时候会设置closeCallback，也就是TcpServer::removeConnection
+            2. 两种情况关闭，1是TcpConnection::handleRead()里面，2是Channel::handleEvent，都会调用这个closeCallback
+            3. 关闭流程大概就是会显示的关闭fd，调用epoll_ctl和它DEL参数宏，还有把它从所属的TcpServer里面的map移除。
+            最后当TcpConnection的引用次数为0时候，自动销毁所有内存，无内存泄漏
+    2. 写事件：
+        ...
+6.
+
+
+
+
+notes:
 main里面tcpServer.start()->eventLoop->run()->
 然后eventloop->run()里面获得epoll->loop()里面传进来的epoll_wait的vector<Channel *>
+
 (TcpConnection和TcpServer里面都会调用channel->enableReading(),这里面会调用epoll_ctl，
 也就是把channel给epoll_event.data.ptr，所以在epoll->loop()能直接把epoll->events_[i].data.ptr
 转成channel *(TcpConnection的设置看下面关于tcpconnection->connectEstablished()))
+
 然后eventloop->run()里面调用每个channel->handleEvent()。
+
 读事件调用channel自己的readCallback_。
+
 对于一个tcpserver，它在构造函数里面会把自己server里面的listenChannel的readCallback
 设置成Tcpserver->handleNewConnection()。
+
 所以对于每个tcpserver的listenChannel，会调用自己的回调函数也就是Tcpserver->handleNewConnection()
-在这里面，会创建新的tcpconnection，此时会把当前tcpserver的4个由main创建tcpserver时候设置的业务回调函数
-也设置给新的tcpconnection
+在这里面，会创建新的tcpconnection，此时会在当前tcpserver设置自己的tcpconnection的4个回调函数
+目前tcpconnection里面的connectionCallback来自于main，根据当前tcpconnection的是不是connected打印不同语句
+里面的closeCallback则是被tcpserver设置，当这个被call时候，会调用tcpconnection里面的handleclose
+同时会在tcpserver里面的关于它的所有tcpconnection的map里面删除这个即将关闭的tcpconnectin
+因为tcpconnection都是shared_ptr，然后计数为0就自动全部释放了，包括里面的socket，channel
+
 然后调用tcpconnection->connectEstablished()
+
 每个tcpconnection有它自己的channel，在tcpconnection->connectEstablished()会调用
 当前tcpconnection的channel->enableReading()，里面会把调用Epoll->updateChannel(),也就是会把当前channel注册到epoll的红黑树里面
 (所以上面的关于把Epoll->loop()的epoll_event数组events_[i].ptr.data转成channel*是合法的)
+
+这个目前的来自于main的业务回调，只根据tcpconnection状态打印不同语句
 然后调用tcpconnection里面的成员函数指针connectionCallback，这个函数指针会在tcpserver里面
 创建新的tcpconnection时候设置成tcpserver自己的connectionCallback，也就是最终来自于main里面传进来的业务回调函数
 该函数参数为const TcpConnectionPtr &conn，因为tcpconnection继承自std::enable_shared_from_this<TcpConnection>
 所以在tcpconnection里面调用这个函数时候，传入shared_from_this()
+
+
 同时在Tcpconnection->connectEstablished()里面还会调用tcpconnection->setReadCallback(),
 把自己tcpconnection->channel_里面的底层回调设置成自己类里面的handleRead()函数
+
 那么以后进行Epoll->loop()还是这个channel，但是在EventLoop->run()里面调用channel->handleEvent()
 这个handleEvent里面还是会调用channel->readCallback_，但此时对于tcpconnection->Channel,它的这个回调
 已经变成了刚刚设置的tcpconnection->handleRead()了
+
+
+
+
+
+

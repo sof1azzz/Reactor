@@ -1,10 +1,11 @@
 #include "EventLoop.h"
+#include <memory>
 
-EventLoop::EventLoop() : epoll_(new Epoll()) {}
+EventLoop::EventLoop() : epoll_(std::make_unique<Epoll>()) {}
 
-EventLoop::~EventLoop() { delete epoll_; }
+EventLoop::~EventLoop() {}
 
-Epoll *EventLoop::getEpoll() const { return epoll_; }
+Epoll *EventLoop::getEpoll() const { return epoll_.get(); }
 
 void EventLoop::run() {
   while (true) {

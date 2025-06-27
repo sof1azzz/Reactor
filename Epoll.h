@@ -16,6 +16,7 @@ public:
   void addFd(int fd, int op);
   void delFd(int fd);
   void updateChannel(Channel *channel);
+  void removeChannel(Channel *channel);
 
 private:
   static constexpr int kMaxEvents_ = 1024;

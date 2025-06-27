@@ -32,7 +32,7 @@ public:
 
   const char *findCRLF() const;
 
-  ssize_t readFd(int fd, int *savedErrno);
+  ssize_t readFd(int fd);
 
 private:
   char *begin();

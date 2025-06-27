@@ -1,6 +1,5 @@
 #include "TcpConnection.h"
 #include <cstring>
-#include <iostream>
 
 TcpConnection::TcpConnection(EventLoop *loop, const std::string &name,
                              int connfd, const InetAddress &localAddr,
@@ -19,6 +18,7 @@ TcpConnection::~TcpConnection() {}
 void TcpConnection::connectEstablished() {
   setState(kConnected);
   channel_->setReadCallback([this]() { handleRead(); });
+  channel_->setCloseCallback([this]() { handleClose(); });
   // 这里面会调用epoll_ctl(EPOLL_CTL_ADD)，把fd加入到epoll红黑树里面
   channel_->enableReading();
   channel_->useEdgeTrigger(true);
@@ -28,10 +28,13 @@ void TcpConnection::connectEstablished() {
 }
 
 void TcpConnection::connectDestroyed() {
-  setState(kDisconnected);
-  channel_.reset();
-  socket_.reset();
-  connectionCallback_(shared_from_this());
+  if (state_ == kConnected) {
+    setState(kDisconnected);
+    channel_->disableAll();
+
+    connectionCallback_(shared_from_this());
+  }
+  loop_->getEpoll()->delFd(channel_->getFd());
 }
 
 void TcpConnection::send(const std::string &buf) {
@@ -41,36 +44,56 @@ void TcpConnection::send(const std::string &buf) {
 }
 
 void TcpConnection::sendInLoop(const std::string &buf) {
-  if (state_ == kConnected) {
-    loop_->queueInLoop([this, buf]() {
-      send(buf);
-    });
-  }
+  // if (state_ == kConnected) {
+  //   loop_->queueInLoop([this, buf]() { send(buf); });
+  // }
+  ::send(socket_->getFd(), buf.c_str(), buf.size(), 0);
+  log("Sent " + std::to_string(buf.size()) + " bytes to client", "handleData");
 }
 
 void TcpConnection::handleRead() {
-  log("Handling client message...", "handleData");
-  char buffer[1024];
-  ssize_t bytes_read = recv(socket_->getFd(), buffer, sizeof(buffer), 0);
-  if (bytes_read == -1) {
-    logError("Error reading from client: " + std::string(strerror(errno)),
-             "handleData");
-    return;
+  ssize_t bytes_read = inputBuffer_.readFd(socket_->getFd());
+  if (bytes_read > 0) {
+    log("Read " + std::to_string(bytes_read) + " bytes from client",
+        "handleData");
+    messageCallback_(shared_from_this(), inputBuffer_);
+  } else if (bytes_read == 0) {
+    handleClose();
+  } else {
+    handleError();
   }
-  if (bytes_read == 0) {
-    log("Client disconnected", "handleData");
-    socket_->close();
-    loop_->getEpoll()->delFd(socket_->getFd());
-    return;
-  }
-  log("Read " + std::to_string(bytes_read) + " bytes from client",
-      "handleData");
-  ::send(socket_->getFd(), buffer, bytes_read, 0);
-  log("Sent " + std::to_string(bytes_read) + " bytes to client", "handleData");
+
+  // 下面是原来的代码，现在用Buffer来处理
+
+  // log("Handling client message...", "handleData");
+  // char buffer[1024];
+  // ssize_t bytes_read = recv(socket_->getFd(), buffer, sizeof(buffer), 0);
+  // if (bytes_read == -1) {
+  //   logError("Error reading from client: " + std::string(strerror(errno)),
+  //            "handleData");
+  //   return;
+  // }
+  // if (bytes_read == 0) {
+  //   log("Client disconnected", "handleData");
+  //   socket_->close();
+  //   loop_->getEpoll()->delFd(socket_->getFd());
+  //   return;
+  // }
+
+  // ::send(socket_->getFd(), buffer, bytes_read, 0);
+  // log("Sent " + std::to_string(bytes_read) + " bytes to client",
+  // "handleData");
 }
 
 void TcpConnection::handleWrite() {}
 
-void TcpConnection::handleClose() {}
+void TcpConnection::handleClose() {
+  state_ = kDisconnecting;
+  channel_->disableAll();
+
+  // 确保在handleClose里面，TcpConnectionPtr不会被释放
+  TcpConnectionPtr guardThis(shared_from_this());
+  closeCallback_(guardThis);
+}
 
 void TcpConnection::handleError() {}

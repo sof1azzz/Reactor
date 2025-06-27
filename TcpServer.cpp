@@ -5,24 +5,25 @@
 #include "Socket.h"
 #include "TcpConnection.h"
 #include <cstring>
+#include <functional>
 #include <memory>
 
 TcpServer::TcpServer(const std::string &ip, const uint16_t port)
-    : ip_(ip), port_(port), listensock_(new Socket(createNonblockingSocket())),
+    : ip_(ip), port_(port),
+      listensock_(std::make_unique<Socket>(createNonblockingSocket())),
+      eventLoop_(std::make_unique<EventLoop>()), server_addr_(ip, port),
       connectionCallback_(nullptr), messageCallback_(nullptr),
-      writeCompleteCallback_(nullptr), closeCallback_(nullptr), connections_(),
-      server_addr_(ip, port) {
+      writeCompleteCallback_(nullptr), connections_() {
   listensock_->setReuseAddr(true);
   listensock_->setReusePort(true);
   listensock_->setTcpNoDelay(true);
   listensock_->setKeepAlive(true);
-  listensock_->bind(InetAddress(ip_, port_));
+  listensock_->bind(server_addr_);
   listensock_->listen();
 
-  // 创建EventLoop
-  eventLoop_ = new EventLoop();
   // 为监听socket创建Channel
-  listen_channel_ = new Channel(listensock_->getFd(), eventLoop_->getEpoll());
+  listen_channel_ =
+      std::make_unique<Channel>(listensock_->getFd(), eventLoop_->getEpoll());
   // 设置监听socket的回调函数
   listen_channel_->setReadCallback([this]() { handleNewConnection(); });
   // 启用读事件
@@ -30,17 +31,11 @@ TcpServer::TcpServer(const std::string &ip, const uint16_t port)
 }
 
 TcpServer::~TcpServer() {
-  listensock_->close();
-  delete listensock_;
-  delete listen_channel_;
-  delete eventLoop_;
+  // 智能指针会自动释放资源，无需手动delete
 }
 
 void TcpServer::stop() {
-  listensock_->close();
-  delete listensock_;
-  delete listen_channel_;
-  delete eventLoop_;
+  // 智能指针会自动释放资源，无需手动delete
 }
 
 void TcpServer::start() { eventLoop_->run(); }
@@ -57,15 +52,21 @@ void TcpServer::handleNewConnection() {
 
   // 创建TcpConnection
   std::shared_ptr<TcpConnection> conn = std::make_shared<TcpConnection>(
-      eventLoop_,
+      eventLoop_.get(),
       client_addr.getIp() + ":" + std::to_string(client_addr.getPort()),
       clientFd, server_addr_, client_addr);
 
   // 设置回调函数
+  // 设置TcpConnection的连接回调为TcpServer::connectionCallback_,来自于main
   conn->setConnectionCallback(connectionCallback_);
+
+  // 待确定
   conn->setMessageCallback(messageCallback_);
   conn->setWriteCompleteCallback(writeCompleteCallback_);
-  conn->setCloseCallback(closeCallback_);
+
+  // 设置TcpConnection的关闭回调为TcpServer::removeConnection
+  conn->setCloseCallback(
+      [this](const TcpConnectionPtr &conn) { removeConnection(conn); });
   // 连接建立
   conn->connectEstablished();
   // 存到map中
@@ -75,4 +76,16 @@ void TcpServer::handleNewConnection() {
   log("Client connected from " + client_addr.getIp() + ":" +
           std::to_string(client_addr.getPort()),
       "handleNewConnection");
+}
+
+void TcpServer::removeConnection(const TcpConnectionPtr &conn) {
+  log("Removing connection: " + conn->name(), "removeConnection");
+
+  // 从map中移除连接
+  connections_.erase(conn->name());
+  conn->connectDestroyed();
+
+  if (connectionCallback_) {
+    connectionCallback_(conn);
+  }
 }

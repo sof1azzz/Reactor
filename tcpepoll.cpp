@@ -22,7 +22,7 @@ void onMessage(const TcpConnectionPtr &conn, Buffer &buf) {
   std::cout << "onMessage(): received " << msg.size()
             << " bytes from connection [" << conn->name() << "]: " << msg
             << std::endl;
-  // conn->send(msg); // 可以在这里添加回显逻辑
+  conn->send(msg);  // 回显
 }
 
 // 3. 数据发送完毕的回调

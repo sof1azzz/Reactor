@@ -1,5 +1,6 @@
 #include "Epoll.h"
 #include "Channel.h"
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <errno.h>
@@ -25,25 +26,46 @@ Epoll::Epoll(int size) : epollfd_(epoll_create1(EPOLL_CLOEXEC)), events_(size) {
 Epoll::~Epoll() { ::close(epollfd_); }
 
 void Epoll::updateChannel(Channel *channel) {
-  epoll_event event;
-  event.data.ptr = channel;
-  event.events = channel->getEvents();
-
-  int fd = channel->getFd();
-  if (channel->isInEpoll()) {
-    if (epoll_ctl(epollfd_, EPOLL_CTL_MOD, fd, &event) == -1) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
-                << strerror(errno) << std::endl;
-      return;
+  const int events = channel->getEvents();
+  if (events == Channel::kNoneEvent) {
+    if (channel->isInEpoll()) {
+      removeChannel(channel);
     }
-  } else {
-    if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, fd, &event) == -1) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
-                << strerror(errno) << std::endl;
-      return;
+  } else {                      // 否则是添加或修改
+    if (channel->isInEpoll()) { // 已在epoll中，则修改
+      epoll_event ev;
+      ev.data.ptr = channel;
+      ev.events = events;
+      epoll_ctl(epollfd_, EPOLL_CTL_MOD, channel->getFd(), &ev);
+    } else { // 不在epoll中，则添加
+      epoll_event ev;
+      ev.data.ptr = channel;
+      ev.events = events;
+      epoll_ctl(epollfd_, EPOLL_CTL_ADD, channel->getFd(), &ev);
+      channel->setInEpoll(true); // **更新状态**
     }
-    channel->setInEpoll(true);
   }
+
+  // 下面是原来的代码,现在要多一个判断，是否要removeChannel
+  // epoll_event event;
+  // event.data.ptr = channel;
+  // event.events = channel->getEvents();
+
+  // int fd = channel->getFd();
+  // if (channel->isInEpoll()) {
+  //   if (epoll_ctl(epollfd_, EPOLL_CTL_MOD, fd, &event) == -1) {
+  //     std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
+  //               << strerror(errno) << std::endl;
+  //     return;
+  //   }
+  // } else {
+  //   if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, fd, &event) == -1) {
+  //     std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
+  //               << strerror(errno) << std::endl;
+  //     return;
+  //   }
+  //   channel->setInEpoll(true);
+  // }
 }
 
 void Epoll::addFd(int fd, int op) {
@@ -85,4 +107,10 @@ std::vector<Channel *> Epoll::loop(int timeout) {
   }
 
   return channels;
+}
+
+void Epoll::removeChannel(Channel *channel) {
+  assert(channel->isInEpoll());
+  epoll_ctl(epollfd_, EPOLL_CTL_DEL, channel->getFd(), nullptr);
+  channel->setInEpoll(false); // **更新状态**
 }

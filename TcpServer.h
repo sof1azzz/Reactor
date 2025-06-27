@@ -37,13 +37,14 @@ public:
   // 处理新连接
 private:
   void handleNewConnection();
+  void removeConnection(const std::shared_ptr<TcpConnection> &conn);
 
 private:
-  EventLoop *eventLoop_;
-  std::string ip_;
-  uint16_t port_;
-  Socket *listensock_;
-  Channel *listen_channel_;
+  std::unique_ptr<EventLoop> eventLoop_;
+  const std::string ip_;
+  const uint16_t port_;
+  std::unique_ptr<Socket> listensock_;
+  std::unique_ptr<Channel> listen_channel_;
   TcpConnectionCallback connectionCallback_;
   MessageCallback messageCallback_;
   WriteCompleteCallback writeCompleteCallback_;
