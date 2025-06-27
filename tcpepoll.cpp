@@ -1,6 +1,5 @@
 #include "Buffer.h"
 #include "Callbacks.h"
-#include "TcpConnection.h"
 #include "TcpServer.h"
 #include <iostream>
 

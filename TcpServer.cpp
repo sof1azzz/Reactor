@@ -26,6 +26,8 @@ TcpServer::TcpServer(const std::string &ip, const uint16_t port)
       std::make_unique<Channel>(listensock_->getFd(), eventLoop_->getEpoll());
   // 设置监听socket的回调函数
   listen_channel_->setReadCallback([this]() { handleNewConnection(); });
+
+  listen_channel_->setWriteCallback([this]() { handleWrite(); });
   // 启用读事件
   listen_channel_->enableReading();
 }
@@ -88,4 +90,8 @@ void TcpServer::removeConnection(const TcpConnectionPtr &conn) {
   if (connectionCallback_) {
     connectionCallback_(conn);
   }
+}
+
+void TcpServer::handleWrite() {
+  log("Handling write event...", "handleWrite");
 }

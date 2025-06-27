@@ -37,6 +37,7 @@ public:
   // 处理新连接
 private:
   void handleNewConnection();
+  void handleWrite();
   void removeConnection(const std::shared_ptr<TcpConnection> &conn);
 
 private:

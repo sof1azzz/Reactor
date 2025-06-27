@@ -28,6 +28,9 @@ public:
   int getFd() const;
   void useEdgeTrigger(bool on);
   void enableReading();
+  void enableWriting();
+  void disableWriting();
+  bool isWriting() const;
   void setInEpoll(bool on);
   void setReadEvent(bool on);
   bool isInEpoll() const;
@@ -36,6 +39,7 @@ public:
   void handleEvent();
   void setReadCallback(std::function<void()> callback);
   void setCloseCallback(std::function<void()> callback);
+  void setWriteCallback(std::function<void()> callback);
 
   void disableAll();
 
@@ -51,4 +55,5 @@ private:
   uint32_t readEvent_;
   std::function<void()> readCallback_;
   std::function<void()> closeCallback_;
+  std::function<void()> writeCallback_;
 };

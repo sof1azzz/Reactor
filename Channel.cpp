@@ -41,6 +41,18 @@ void Channel::enableReading() {
   epoll_->updateChannel(this);
 }
 
+void Channel::enableWriting() {
+  events_ |= EPOLLOUT;
+  epoll_->updateChannel(this);
+}
+
+void Channel::disableWriting() {
+  events_ &= ~EPOLLOUT;
+  epoll_->updateChannel(this);
+}
+
+bool Channel::isWriting() const { return events_ & EPOLLOUT; }
+
 void Channel::setInEpoll(bool on) { inEpoll_ = on; }
 
 void Channel::setReadEvent(bool on) {
@@ -91,4 +103,8 @@ void Channel::setReadCallback(std::function<void()> callback) { // 设置读回�
 
 void Channel::setCloseCallback(std::function<void()> callback) { // 设置关闭回调
   closeCallback_ = callback;
+}
+
+void Channel::setWriteCallback(std::function<void()> callback) { // 设置写回调
+  writeCallback_ = callback;
 }
