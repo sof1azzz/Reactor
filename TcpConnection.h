@@ -45,7 +45,7 @@ private:
   void handleClose();
   void handleError();
 
-  void sendInLoop(const std::string &message);
+  void sendInLoop(const std::string &buf);
   void shutdownInLoop();
 
   EventLoop *loop_;

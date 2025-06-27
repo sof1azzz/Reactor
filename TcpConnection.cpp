@@ -10,7 +10,7 @@ TcpConnection::TcpConnection(EventLoop *loop, const std::string &name,
       channel_(std::make_unique<Channel>(connfd, loop_->getEpoll())),
       localAddr_(localAddr), peerAddr_(peerAddr), connectionCallback_(nullptr),
       messageCallback_(nullptr), writeCompleteCallback_(nullptr),
-      closeCallback_(nullptr) {
+      closeCallback_(nullptr), inputBuffer_(), outputBuffer_() {
   log("TcpConnection created", "TcpConnection");
 }
 
@@ -32,6 +32,20 @@ void TcpConnection::connectDestroyed() {
   channel_.reset();
   socket_.reset();
   connectionCallback_(shared_from_this());
+}
+
+void TcpConnection::send(const std::string &buf) {
+  if (state_ == kConnected) {
+    sendInLoop(buf);
+  }
+}
+
+void TcpConnection::sendInLoop(const std::string &buf) {
+  if (state_ == kConnected) {
+    loop_->queueInLoop([this, buf]() {
+      send(buf);
+    });
+  }
 }
 
 void TcpConnection::handleRead() {

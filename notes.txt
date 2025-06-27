@@ -1,0 +1,25 @@
+main里面tcpServer.start()->eventLoop->run()->
+然后eventloop->run()里面获得epoll->loop()里面传进来的epoll_wait的vector<Channel *>
+(TcpConnection和TcpServer里面都会调用channel->enableReading(),这里面会调用epoll_ctl，
+也就是把channel给epoll_event.data.ptr，所以在epoll->loop()能直接把epoll->events_[i].data.ptr
+转成channel *(TcpConnection的设置看下面关于tcpconnection->connectEstablished()))
+然后eventloop->run()里面调用每个channel->handleEvent()。
+读事件调用channel自己的readCallback_。
+对于一个tcpserver，它在构造函数里面会把自己server里面的listenChannel的readCallback
+设置成Tcpserver->handleNewConnection()。
+所以对于每个tcpserver的listenChannel，会调用自己的回调函数也就是Tcpserver->handleNewConnection()
+在这里面，会创建新的tcpconnection，此时会把当前tcpserver的4个由main创建tcpserver时候设置的业务回调函数
+也设置给新的tcpconnection
+然后调用tcpconnection->connectEstablished()
+每个tcpconnection有它自己的channel，在tcpconnection->connectEstablished()会调用
+当前tcpconnection的channel->enableReading()，里面会把调用Epoll->updateChannel(),也就是会把当前channel注册到epoll的红黑树里面
+(所以上面的关于把Epoll->loop()的epoll_event数组events_[i].ptr.data转成channel*是合法的)
+然后调用tcpconnection里面的成员函数指针connectionCallback，这个函数指针会在tcpserver里面
+创建新的tcpconnection时候设置成tcpserver自己的connectionCallback，也就是最终来自于main里面传进来的业务回调函数
+该函数参数为const TcpConnectionPtr &conn，因为tcpconnection继承自std::enable_shared_from_this<TcpConnection>
+所以在tcpconnection里面调用这个函数时候，传入shared_from_this()
+同时在Tcpconnection->connectEstablished()里面还会调用tcpconnection->setReadCallback(),
+把自己tcpconnection->channel_里面的底层回调设置成自己类里面的handleRead()函数
+那么以后进行Epoll->loop()还是这个channel，但是在EventLoop->run()里面调用channel->handleEvent()
+这个handleEvent里面还是会调用channel->readCallback_，但此时对于tcpconnection->Channel,它的这个回调
+已经变成了刚刚设置的tcpconnection->handleRead()了
