@@ -30,6 +30,7 @@ class TestClient:
     
     def send(self, message):
         """发送消息到服务器"""
+        assert self.socket is not None, "Socket 尚未连接"
         try:
             self.socket.sendall(message.encode('utf-8'))
             print(f"→ 发送: {message[:70] if len(message) > 70 else message}")
@@ -40,6 +41,7 @@ class TestClient:
     
     def receive(self):
         """接收服务器响应"""
+        assert self.socket is not None, "Socket 尚未连接"
         try:
             data = self.socket.recv(4096) # 使用稍大的缓冲区
             if data:

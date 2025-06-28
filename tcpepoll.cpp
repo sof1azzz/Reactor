@@ -21,7 +21,7 @@ void onMessage(const TcpConnectionPtr &conn, Buffer &buf) {
   std::cout << "onMessage(): received " << msg.size()
             << " bytes from connection [" << conn->name() << "]: " << msg
             << std::endl;
-  conn->send(msg);  // 回显
+  conn->send(msg); // 回显
 }
 
 // 3. 数据发送完毕的回调
@@ -45,6 +45,9 @@ int main(int argc, char *argv[]) {
   int port = atoi(argv[2]);
 
   TcpServer tcpServer(ip, port);
+
+  // 设置线程数
+  tcpServer.setThreadNum(4);
 
   // 设置全部四个回调函数
   tcpServer.setConnectionCallback(onConnection);

@@ -2,6 +2,8 @@
 
 #include "Callbacks.h"
 #include "EventLoop.h"
+#include "EventLoopThread.h"
+#include "EventLoopThreadPool.h"
 #include "InetAddress.h"
 #include "Socket.h"
 #include "TcpConnection.h"
@@ -18,6 +20,8 @@ public:
 
   void start();
   void stop();
+
+  void setThreadNum(int numThreads);
 
   // 获取连接
   std::shared_ptr<TcpConnection> getConnection(const std::string &name) {
@@ -42,6 +46,7 @@ private:
 
 private:
   std::unique_ptr<EventLoop> eventLoop_;
+  std::unique_ptr<EventLoopThreadPool> threadPool_;
   const std::string ip_;
   const uint16_t port_;
   std::unique_ptr<Socket> listensock_;

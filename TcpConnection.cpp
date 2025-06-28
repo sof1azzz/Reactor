@@ -19,6 +19,7 @@ void TcpConnection::connectEstablished() {
   setState(kConnected);
   channel_->setReadCallback([this]() { handleRead(); });
   channel_->setCloseCallback([this]() { handleClose(); });
+  channel_->setWriteCallback([this]() { handleWrite(); });
   // 这里面会调用epoll_ctl(EPOLL_CTL_ADD)，把fd加入到epoll红黑树里面
   channel_->enableReading();
   channel_->useEdgeTrigger(true);
@@ -39,7 +40,13 @@ void TcpConnection::connectDestroyed() {
 
 void TcpConnection::send(const std::string &buf) {
   if (state_ == kConnected) {
-    sendInLoop(buf);
+    if (loop_->isInLoopThread()) {
+      std::cout << "TcpConnection::send() in loop thread" << std::endl;
+      sendInLoop(buf);
+    } else {
+      std::cout << "TcpConnection::send() not in loop thread" << std::endl;
+      loop_->queueInLoop([this, buf]() { send(buf); });
+    }
   }
 }
 
@@ -62,27 +69,6 @@ void TcpConnection::handleRead() {
   } else {
     handleError();
   }
-
-  // 下面是原来的代码，现在用Buffer来处理
-
-  // log("Handling client message...", "handleData");
-  // char buffer[1024];
-  // ssize_t bytes_read = recv(socket_->getFd(), buffer, sizeof(buffer), 0);
-  // if (bytes_read == -1) {
-  //   logError("Error reading from client: " + std::string(strerror(errno)),
-  //            "handleData");
-  //   return;
-  // }
-  // if (bytes_read == 0) {
-  //   log("Client disconnected", "handleData");
-  //   socket_->close();
-  //   loop_->getEpoll()->delFd(socket_->getFd());
-  //   return;
-  // }
-
-  // ::send(socket_->getFd(), buffer, bytes_read, 0);
-  // log("Sent " + std::to_string(bytes_read) + " bytes to client",
-  // "handleData");
 }
 
 void TcpConnection::handleWrite() {}

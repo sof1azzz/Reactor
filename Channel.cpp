@@ -85,7 +85,9 @@ void Channel::handleEvent() {
       readCallback_(); // 调用设置的回调函数，能处理第一次连接和后续数据通信
     }
   } else if (events_ & EPOLLOUT) { // 写事件
-    log("Write event occurred", __func__);
+    if (writeCallback_) {
+      writeCallback_(); // 调用设置的回调函数，能处理第一次连接和后续数据通信
+    }
   } else { // 其他事件，忽略
     log("Unknown event", __func__);
   }

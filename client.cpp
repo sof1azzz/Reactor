@@ -224,17 +224,13 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // 或者使用非阻塞连接 (取消注释下面的代码并注释上面的connect)
-  // if (!client.connect_nonblock(argv[1], atoi(argv[2]))) {
-  //   std::cerr << "Error in main: Failed to connect to server" << std::endl;
-  //   return 1;
-  // }
-
   while (true) {
     if (!client.send("Hello, server!")) {
       std::cerr << "Error in main: Failed to send message" << std::endl;
       break;
     }
+
+    std::cout << "send message: Hello, server!" << std::endl;
 
     std::string message;
     if (!client.recv(message)) {

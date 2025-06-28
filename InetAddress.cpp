@@ -1,30 +1,33 @@
 #include "InetAddress.h"
+#include <cstring>
 
-InetAddress::InetAddress(const std::string &ip, int port) {
+InetAddress::InetAddress(uint16_t port, bool loopbackOnly) {
+  bzero(&addr_, sizeof addr_);
   addr_.sin_family = AF_INET;
+  addr_.sin_addr.s_addr = htonl(loopbackOnly ? INADDR_LOOPBACK : INADDR_ANY);
   addr_.sin_port = htons(port);
-  addr_.sin_addr.s_addr = inet_addr(ip.c_str());
 }
 
-InetAddress::InetAddress(const struct sockaddr_in &addr) : addr_(addr) {}
+InetAddress::InetAddress(const std::string &ip, uint16_t port) {
+  bzero(&addr_, sizeof addr_);
+  addr_.sin_family = AF_INET;
+  if (::inet_pton(AF_INET, ip.c_str(), &addr_.sin_addr) <= 0) {
+    // Here you should ideally log an error
+  }
+  addr_.sin_port = htons(port);
+}
 
-InetAddress::InetAddress() {
+std::string InetAddress::getIp() const {
+  char buf[64] = "";
+  ::inet_ntop(AF_INET, &addr_.sin_addr, buf, sizeof(buf));
+  return buf;
+}
+
+uint16_t InetAddress::getPort() const { return ntohs(addr_.sin_port); }
+
+const struct sockaddr *InetAddress::getAddr() const {
+  return static_cast<const struct sockaddr *>(
+      static_cast<const void *>(&addr_));
 }
 
 InetAddress::~InetAddress() {}
-
-std::string InetAddress::getIp() const {
-  return inet_ntoa(addr_.sin_addr);
-}
-
-int InetAddress::getPort() const {
-  return ntohs(addr_.sin_port);
-}
-
-const struct sockaddr *InetAddress::getSockAddr() const {
-  return reinterpret_cast<const struct sockaddr *>(&addr_);
-}
-
-void InetAddress::setSockAddr(const struct sockaddr *addr) {
-  addr_ = *reinterpret_cast<const struct sockaddr_in *>(addr);
-}

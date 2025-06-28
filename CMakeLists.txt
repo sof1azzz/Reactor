@@ -5,5 +5,34 @@ project(Reactor)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(tcpepoll tcpepoll.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp EventLoop.cpp TcpServer.cpp Buffer.cpp TcpConnection.cpp)
-add_executable(client client.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp EventLoop.cpp TcpServer.cpp Buffer.cpp TcpConnection.cpp)
+add_executable(tcpepoll
+    tcpepoll.cpp
+    Socket.cpp
+    InetAddress.cpp
+    Epoll.cpp
+    Channel.cpp
+    EventLoop.cpp
+    EventLoopThread.cpp
+    EventLoopThreadPool.cpp
+    TcpServer.cpp
+    TcpConnection.cpp
+    Buffer.cpp
+)
+
+target_link_libraries(tcpepoll pthread)
+
+add_executable(client
+    client.cpp
+    Socket.cpp
+    InetAddress.cpp
+    Epoll.cpp
+    Channel.cpp
+    EventLoop.cpp
+    EventLoopThread.cpp
+    EventLoopThreadPool.cpp
+    TcpServer.cpp
+    TcpConnection.cpp
+    Buffer.cpp
+)
+
+target_link_libraries(client pthread)

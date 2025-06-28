@@ -1,10 +1,12 @@
 #include "Socket.h"
-#include <cstdlib>
+#include "InetAddress.h"
+#include <cerrno>
+#include <cstdio>
 #include <cstring>
-#include <errno.h>
-#include <iostream>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 int createNonblockingSocket() {
   int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
@@ -17,14 +19,15 @@ int createNonblockingSocket() {
 }
 
 Socket::Socket(int fd) : fd_(fd) {}
+Socket::Socket() : fd_(createNonblockingSocket()) {}
 
 Socket::~Socket() { ::close(fd_); }
 
 int Socket::getFd() const { return fd_; }
 
 void Socket::setReuseAddr(bool on) {
-  int opt = on ? 1 : 0;
-  ::setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+  int optval = on ? 1 : 0;
+  ::setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 }
 
 void Socket::setReusePort(bool on) {
@@ -43,35 +46,50 @@ void Socket::setKeepAlive(bool on) {
 }
 
 void Socket::bind(const InetAddress &addr) {
-  if (::bind(fd_, addr.getSockAddr(), sizeof(addr)) == -1) {
+  if (::bind(fd_, addr.getAddr(), sizeof(struct sockaddr_in)) == -1) {
     std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
               << strerror(errno) << std::endl;
     exit(EXIT_FAILURE);
   }
 }
 
-void Socket::listen(int backlog) {
-  if (::listen(fd_, backlog) == -1) {
+void Socket::listen() {
+  if (::listen(fd_, SOMAXCONN) == -1) {
     std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
               << strerror(errno) << std::endl;
     exit(EXIT_FAILURE);
   }
 }
 
-int Socket::accept(InetAddress &addr) const {
-  sockaddr_in peer_addr;
-  socklen_t peer_addr_len = sizeof(peer_addr);
-  int clientsock =
-      ::accept4(fd_, reinterpret_cast<struct sockaddr *>(&peer_addr),
-                 &peer_addr_len,
-                 SOCK_NONBLOCK);
-  if (clientsock == -1) {
-    std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
-              << strerror(errno) << std::endl;
-    exit(EXIT_FAILURE);
+int Socket::accept(InetAddress &addr) {
+  struct sockaddr_in client_addr;
+  socklen_t len = sizeof(client_addr);
+  int connfd = ::accept4(fd_, (struct sockaddr *)&client_addr, &len,
+                         SOCK_NONBLOCK | SOCK_CLOEXEC);
+  if (connfd >= 0) {
+    addr.setAddr(client_addr);
   }
-  addr.setSockAddr(reinterpret_cast<struct sockaddr *>(&peer_addr));
-  return clientsock;
+  return connfd;
 }
 
-void Socket::close() { ::close(fd_); }
+struct sockaddr_in Socket::getLocalAddr(int sockfd) {
+  struct sockaddr_in localaddr;
+  bzero(&localaddr, sizeof localaddr);
+  socklen_t addrlen = sizeof(localaddr);
+  if (::getsockname(sockfd, (struct sockaddr *)&localaddr, &addrlen) < 0) {
+    std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
+              << strerror(errno) << std::endl;
+  }
+  return localaddr;
+}
+
+struct sockaddr_in Socket::getPeerAddr(int sockfd) {
+  struct sockaddr_in peeraddr;
+  bzero(&peeraddr, sizeof peeraddr);
+  socklen_t addrlen = sizeof(peeraddr);
+  if (::getpeername(sockfd, (struct sockaddr *)&peeraddr, &addrlen) < 0) {
+    std::cerr << __FILE__ << ":" << __LINE__ << " " << __func__ << " "
+              << strerror(errno) << std::endl;
+  }
+  return peeraddr;
+}

@@ -8,7 +8,7 @@ class Channel;
 
 class Epoll {
 public:
-  Epoll(int size = kMaxEvents_);
+  Epoll();
   ~Epoll();
 
   std::vector<Channel *> loop(int timeout = -1);
@@ -17,6 +17,7 @@ public:
   void delFd(int fd);
   void updateChannel(Channel *channel);
   void removeChannel(Channel *channel);
+  void poll(std::vector<Channel *> &channels);
 
 private:
   static constexpr int kMaxEvents_ = 1024;
