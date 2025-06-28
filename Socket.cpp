@@ -81,7 +81,7 @@ struct sockaddr_in Socket::getLocalAddr(int sockfd) {
               << strerror(errno) << std::endl;
   }
   return localaddr;
-}
+  }
 
 struct sockaddr_in Socket::getPeerAddr(int sockfd) {
   struct sockaddr_in peeraddr;

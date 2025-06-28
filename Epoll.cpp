@@ -39,7 +39,7 @@ void Epoll::updateChannel(Channel *channel) {
 
 void Epoll::poll(std::vector<Channel *> &channels) {
   while (true) {
-    int nfds = epoll_wait(epollfd_, events_.data(), events_.size(), -1);
+    int nfds = epoll_wait(epollfd_, events_.data(), events_.size(), 10);
     if (nfds < 0) {
       if (errno == EINTR)
         continue;
@@ -47,7 +47,7 @@ void Epoll::poll(std::vector<Channel *> &channels) {
       break;
     }
     if (nfds == 0) {
-      continue;
+      break;
     }
     for (int i = 0; i < nfds; ++i) {
       Channel *ch = (Channel *)events_[i].data.ptr;

@@ -38,7 +38,7 @@ void onClose(const TcpConnectionPtr &conn) {
 
 int main(int argc, char *argv[]) {
   if (argc != 3) {
-    // logError("Usage: " + std::string(argv[0]) + " <ip> <port>", "main");
+    logError("Usage: " + std::string(argv[0]) + " <ip> <port>", "main");
     return 1;
   }
   const char *ip = argv[1];

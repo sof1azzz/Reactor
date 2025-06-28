@@ -1,14 +1,14 @@
 #include "TcpServer.h"
 #include "Channel.h"
 #include "EventLoop.h"
+#include "EventLoopThreadPool.h"
 #include "InetAddress.h"
 #include "Socket.h"
 #include "TcpConnection.h"
-#include "EventLoopThreadPool.h"
 #include <cstring>
 #include <functional>
 #include <memory>
-#include <cstring>
+#include <type_traits>
 
 TcpServer::TcpServer(const std::string &ip, const uint16_t port)
     : eventLoop_(std::make_unique<EventLoop>()),
@@ -58,6 +58,11 @@ void TcpServer::start() {
   eventLoop_->loop();
 }
 
+// 判断T是否是TcpConnection的引用
+template <typename T>
+concept IsTcpConnRef =
+    std::is_same_v<std::remove_cvref_t<T>, std::shared_ptr<TcpConnection>>;
+
 // 处理新连接的回调函数。并设置客户端数据处理回调
 void TcpServer::handleNewConnection() {
   InetAddress peerAddr;
@@ -83,12 +88,14 @@ void TcpServer::handleNewConnection() {
   conn->setWriteCompleteCallback(writeCompleteCallback_);
 
   // 设置TcpConnection的关闭回调为TcpServer::removeConnection
-  conn->setCloseCallback([this](auto &&PH1) {
-    removeConnection(std::forward<decltype(PH1)>(PH1));
+  conn->setCloseCallback([this]<IsTcpConnRef T>(T &&PH1) {
+    removeConnection(std::forward<T>(PH1));
   });
   // 连接建立
-  // ioLoop->queueInLoop([conn]() { conn->connectEstablished(); });
-  conn->connectEstablished();
+
+  // 要改
+  ioLoop->queueInLoop([conn]() { conn->connectEstablished(); });
+  // conn->connectEstablished();
   // 存到map中
   connections_[conn->name()] = conn;
 }

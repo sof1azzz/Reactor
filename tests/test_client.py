@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-一个简化的TCP客户端, 用于测试Reactor网络库的核心功能。
-(多线程并发还未实现)
+一个全面的TCP客户端压力测试工具，用于测试Reactor网络库的性能和稳定性。
 """
 
 import socket
 import time
 import threading
 import sys
+import random
+import statistics
+from collections import defaultdict
 
 class TestClient:
     """一个封装了TCP连接、发送、接收和关闭操作的客户端类。"""
@@ -17,129 +19,273 @@ class TestClient:
         self.port = port
         self.socket = None
         
-    def connect(self):
+    def connect(self, timeout=5):
         """连接到服务器"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(timeout)
             self.socket.connect((self.host, self.port))
-            print(f"✓ 连接成功 -> {self.host}:{self.port}")
             return True
         except Exception as e:
-            print(f"✗ 连接失败: {e}")
             return False
     
     def send(self, message):
         """发送消息到服务器"""
-        assert self.socket is not None, "Socket 尚未连接"
+        if self.socket is None:
+            return False
         try:
             self.socket.sendall(message.encode('utf-8'))
-            print(f"→ 发送: {message[:70] if len(message) > 70 else message}")
             return True
-        except Exception as e:
-            print(f"✗ 发送失败: {e}")
+        except Exception:
             return False
     
     def receive(self):
         """接收服务器响应"""
-        assert self.socket is not None, "Socket 尚未连接"
+        if self.socket is None:
+            return None
         try:
-            data = self.socket.recv(4096) # 使用稍大的缓冲区
+            data = self.socket.recv(4096)
             if data:
-                message = data.decode('utf-8')
-                print(f"← 接收: {message[:70] if len(message) > 70 else message}")
-                return message
-            else:
-                print("✗ 服务器似乎已关闭连接。")
-                return None
-        except Exception as e:
-            print(f"✗ 接收失败: {e}")
+                return data.decode('utf-8')
+            return None
+        except Exception:
             return None
     
     def close(self):
         """关闭连接"""
         if self.socket:
-            self.socket.close()
-            print("✓ 连接已关闭。")
+            try:
+                self.socket.close()
+            except:
+                pass
 
-def main():
-    print("开始测试Reactor网络库...")
-    print("请确保服务器已在127.0.0.1:8888上运行。")
-    print("-" * 40)
+# 全局统计
+stats = {
+    'connections_success': 0,
+    'connections_failed': 0,
+    'messages_success': 0,
+    'messages_failed': 0,
+    'response_times': [],
+    'lock': threading.Lock()
+}
 
-    try:
-        # --- 测试 1: 单连接与多种消息类型 ---
-        print("\n=== [测试 1/2] 单连接与多种消息回显 ===")
+def update_stats(conn_success=0, conn_failed=0, msg_success=0, msg_failed=0, response_time=None):
+    with stats['lock']:
+        stats['connections_success'] += conn_success
+        stats['connections_failed'] += conn_failed
+        stats['messages_success'] += msg_success
+        stats['messages_failed'] += msg_failed
+        if response_time is not None:
+            stats['response_times'].append(response_time)
+
+def basic_functionality_test():
+    """基础功能测试"""
+    print("\n=== [测试 1/4] 基础功能测试 ===")
+    client = TestClient()
+    
+    if not client.connect():
+        print("✗ 基础测试失败：无法连接到服务器")
+        return False
+    
+    test_messages = [
+        "Hello, Reactor!",
+        "你好，世界！",
+        "A" * 100,  # 100字节
+        "B" * 1000, # 1KB
+        "C" * 4000, # 4KB（接近缓冲区大小）
+    ]
+    
+    for i, msg in enumerate(test_messages):
+        start_time = time.time()
+        if not client.send(msg):
+            print(f"✗ 发送消息 {i+1} 失败")
+            client.close()
+            return False
+        
+        response = client.receive()
+        response_time = time.time() - start_time
+        
+        if response != msg:
+            print(f"✗ 消息 {i+1} 回显不匹配")
+            client.close()
+            return False
+        
+        print(f"✓ 消息 {i+1} ({len(msg)} 字节) - {response_time*1000:.2f}ms")
+        update_stats(msg_success=1, response_time=response_time)
+    
+    client.close()
+    print("✓ 基础功能测试通过")
+    return True
+
+def concurrent_connections_test(num_clients=50):
+    """渐进式并发连接测试"""
+    print(f"\n=== [测试 2/4] 并发连接测试 ({num_clients} 客户端) ===")
+    
+    def client_worker(client_id):
         client = TestClient()
         if not client.connect():
-            print("✗ 测试失败：无法连接到服务器。")
-            sys.exit(1)
-
-        test_messages = {
-            "基本消息": "Hello, Reactor!",
-            "中文消息": "你好，世界！",
-            "长消息": "This_is_a_long_message_" * 20  # ~400 bytes
-        }
-
-        all_passed = True
-        for name, msg in test_messages.items():
-            print(f"\n--- 正在测试: {name} ---")
-            if not client.send(msg):
-                all_passed = False
-                break
-            
+            update_stats(conn_failed=1)
+            return
+        
+        update_stats(conn_success=1)
+        
+        # 发送一条消息
+        msg = f"Client-{client_id}-Hello"
+        start_time = time.time()
+        
+        if client.send(msg):
             response = client.receive()
-            if response != msg:
-                print(f"✗ 失败: 回显不匹配！")
-                all_passed = False
-                break
+            response_time = time.time() - start_time
+            
+            if response == msg:
+                update_stats(msg_success=1, response_time=response_time)
             else:
-                print(f"✓ 成功: {name}回显正确。")
-            time.sleep(0.1)
-
-        client.close()
-        
-        if not all_passed:
-             print("\n✗ 单连接测试失败，测试终止。")
-             sys.exit(1)
+                update_stats(msg_failed=1)
         else:
-            print("\n✓ 单连接测试全部通过！")
-
-        # --- 测试 2: 多客户端并发 ---
-        time.sleep(1)  # 等待服务器处理上一个连接的关闭
-        print("\n\n=== [测试 2/2] 多客户端并发连接 ===")
+            update_stats(msg_failed=1)
         
-        num_clients = 5
-        threads = []
+        client.close()
+    
+    threads = []
+    start_time = time.time()
+    
+    # 分批启动连接，避免瞬间压力过大
+    batch_size = 10
+    for batch_start in range(0, num_clients, batch_size):
+        batch_end = min(batch_start + batch_size, num_clients)
         
-        def client_worker(client_id):
-            worker_client = TestClient()
-            if worker_client.connect():
-                msg = f"来自客户端 {client_id} 的消息"
-                worker_client.send(msg)
-                resp = worker_client.receive()
-                if resp != msg:
-                    print(f"✗ 并发测试失败 (客户端 {client_id}): 回显不匹配")
-                worker_client.close()
-        
-        print(f"正在启动 {num_clients} 个并发客户端...")
-        for i in range(num_clients):
+        # 启动一批线程
+        batch_threads = []
+        for i in range(batch_start, batch_end):
             thread = threading.Thread(target=client_worker, args=(i + 1,))
-            threads.append(thread)
+            batch_threads.append(thread)
             thread.start()
         
-        for thread in threads:
-            thread.join()
+        threads.extend(batch_threads)
+        time.sleep(0.1)  # 批次间隔100ms
+    
+    # 等待所有线程完成
+    for thread in threads:
+        thread.join()
+    
+    total_time = time.time() - start_time
+    print(f"✓ 并发测试完成 - 耗时 {total_time:.2f}s")
+    return True
+
+def sustained_load_test(duration=30, clients_per_second=5):
+    """持续负载测试"""
+    print(f"\n=== [测试 3/4] 持续负载测试 ({duration}秒, {clients_per_second} 连接/秒) ===")
+    
+    def client_worker(client_id):
+        client = TestClient()
+        if not client.connect():
+            update_stats(conn_failed=1)
+            return
         
-        print("\n✓ 并发连接测试完成。")
+        update_stats(conn_success=1)
+        
+        # 发送多条消息
+        for i in range(3):  # 每个客户端发送3条消息
+            msg_size = random.choice([100, 500, 1000])  # 随机消息大小
+            msg = f"Client-{client_id}-Msg-{i}-" + "X" * (msg_size - 20)
+            
+            start_time = time.time()
+            if client.send(msg):
+                response = client.receive()
+                response_time = time.time() - start_time
+                
+                if response == msg:
+                    update_stats(msg_success=1, response_time=response_time)
+                else:
+                    update_stats(msg_failed=1)
+            else:
+                update_stats(msg_failed=1)
+            
+            time.sleep(0.1)  # 消息间隔
+        
+        client.close()
+    
+    start_time = time.time()
+    client_id = 0
+    
+    while time.time() - start_time < duration:
+        # 每秒启动指定数量的客户端
+        for _ in range(clients_per_second):
+            client_id += 1
+            thread = threading.Thread(target=client_worker, args=(client_id,))
+            thread.daemon = True  # 设置为守护线程
+            thread.start()
+        
+        time.sleep(1)  # 等待1秒
+        
+        # 实时显示统计
+        with stats['lock']:
+            print(f"运行时间: {time.time() - start_time:.1f}s | "
+                  f"连接: {stats['connections_success']}/{stats['connections_success'] + stats['connections_failed']} | "
+                  f"消息: {stats['messages_success']}/{stats['messages_success'] + stats['messages_failed']}")
+    
+    # 等待最后一批完成
+    time.sleep(3)
+    print("✓ 持续负载测试完成")
+    return True
 
-        # --- 测试总结 ---
-        print("\n" + "=" * 40)
-        print("✓✓✓ 所有核心功能测试已成功执行！")
+def print_final_statistics():
+    """打印最终统计结果"""
+    print("\n=== [测试 4/4] 性能统计报告 ===")
+    
+    with stats['lock']:
+        total_connections = stats['connections_success'] + stats['connections_failed']
+        total_messages = stats['messages_success'] + stats['messages_failed']
+        
+        print(f"连接统计:")
+        print(f"  成功: {stats['connections_success']}")
+        print(f"  失败: {stats['connections_failed']}")
+        print(f"  成功率: {stats['connections_success']/total_connections*100:.1f}%" if total_connections > 0 else "  成功率: 0%")
+        
+        print(f"\n消息统计:")
+        print(f"  成功: {stats['messages_success']}")
+        print(f"  失败: {stats['messages_failed']}")
+        print(f"  成功率: {stats['messages_success']/total_messages*100:.1f}%" if total_messages > 0 else "  成功率: 0%")
+        
+        if stats['response_times']:
+            response_times = stats['response_times']
+            print(f"\n响应时间统计:")
+            print(f"  平均: {statistics.mean(response_times)*1000:.2f}ms")
+            print(f"  中位数: {statistics.median(response_times)*1000:.2f}ms")
+            print(f"  最小: {min(response_times)*1000:.2f}ms")
+            print(f"  最大: {max(response_times)*1000:.2f}ms")
+            if len(response_times) > 1:
+                print(f"  标准差: {statistics.stdev(response_times)*1000:.2f}ms")
 
+def main():
+    print("Reactor网络库压力测试工具")
+    print("请确保服务器已在127.0.0.1:8888上运行")
+    print("=" * 50)
+
+    try:
+        # 基础功能测试
+        if not basic_functionality_test():
+            print("✗ 基础功能测试失败，终止测试")
+            sys.exit(1)
+        
+        # 并发连接测试（适中的数量）
+        concurrent_connections_test(num_clients=50)
+        
+        # 持续负载测试
+        sustained_load_test(duration=30, clients_per_second=3)
+        
+        # 打印统计
+        print_final_statistics()
+        
+        print("\n" + "=" * 50)
+        print("✓✓✓ 所有压力测试完成！")
+        
     except KeyboardInterrupt:
-        print("\n用户中断测试。")
+        print("\n用户中断测试")
+        print_final_statistics()
     except Exception as e:
-        print(f"\n测试过程中出现严重错误: {e}")
+        print(f"\n测试过程中出现错误: {e}")
+        print_final_statistics()
 
 if __name__ == "__main__":
     main() 
