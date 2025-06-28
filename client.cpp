@@ -225,7 +225,8 @@ int main(int argc, char *argv[]) {
   }
 
   while (true) {
-    if (!client.send("Hello, server!")) {
+    std::string longStr = std::string(1024 * 1024 * 10, 'a');
+    if (!client.send(longStr)) {
       std::cerr << "Error in main: Failed to send message" << std::endl;
       break;
     }

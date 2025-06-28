@@ -11,6 +11,33 @@ import sys
 import random
 import statistics
 from collections import defaultdict
+from datetime import datetime
+import os
+
+class TestLogger:
+    """测试日志记录器"""
+    def __init__(self, log_file="reactor_test_results.log"):
+        self.log_file = log_file
+        self.lock = threading.Lock()
+        
+        # 确保日志目录存在
+        os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+        
+        # 写入测试开始标记
+        self.log(f"\n{'='*60}")
+        self.log(f"测试开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        self.log(f"{'='*60}")
+    
+    def log(self, message):
+        """同时输出到控制台和日志文件"""
+        print(message)
+        with self.lock:
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write(message + '\n')
+                f.flush()  # 确保立即写入磁盘
+
+# 全局日志器
+logger = TestLogger("tests/reactor_test_results.log")
 
 class TestClient:
     """一个封装了TCP连接、发送、接收和关闭操作的客户端类。"""
@@ -80,11 +107,11 @@ def update_stats(conn_success=0, conn_failed=0, msg_success=0, msg_failed=0, res
 
 def basic_functionality_test():
     """基础功能测试"""
-    print("\n=== [测试 1/4] 基础功能测试 ===")
+    logger.log("\n=== [测试 1/4] 基础功能测试 ===")
     client = TestClient()
     
     if not client.connect():
-        print("✗ 基础测试失败：无法连接到服务器")
+        logger.log("✗ 基础测试失败：无法连接到服务器")
         return False
     
     test_messages = [
@@ -98,7 +125,7 @@ def basic_functionality_test():
     for i, msg in enumerate(test_messages):
         start_time = time.time()
         if not client.send(msg):
-            print(f"✗ 发送消息 {i+1} 失败")
+            logger.log(f"✗ 发送消息 {i+1} 失败")
             client.close()
             return False
         
@@ -106,20 +133,20 @@ def basic_functionality_test():
         response_time = time.time() - start_time
         
         if response != msg:
-            print(f"✗ 消息 {i+1} 回显不匹配")
+            logger.log(f"✗ 消息 {i+1} 回显不匹配")
             client.close()
             return False
         
-        print(f"✓ 消息 {i+1} ({len(msg)} 字节) - {response_time*1000:.2f}ms")
+        logger.log(f"✓ 消息 {i+1} ({len(msg)} 字节) - {response_time*1000:.2f}ms")
         update_stats(msg_success=1, response_time=response_time)
     
     client.close()
-    print("✓ 基础功能测试通过")
+    logger.log("✓ 基础功能测试通过")
     return True
 
 def concurrent_connections_test(num_clients=50):
     """渐进式并发连接测试"""
-    print(f"\n=== [测试 2/4] 并发连接测试 ({num_clients} 客户端) ===")
+    logger.log(f"\n=== [测试 2/4] 并发连接测试 ({num_clients} 客户端) ===")
     
     def client_worker(client_id):
         client = TestClient()
@@ -169,12 +196,12 @@ def concurrent_connections_test(num_clients=50):
         thread.join()
     
     total_time = time.time() - start_time
-    print(f"✓ 并发测试完成 - 耗时 {total_time:.2f}s")
+    logger.log(f"✓ 并发测试完成 - 耗时 {total_time:.2f}s")
     return True
 
 def sustained_load_test(duration=30, clients_per_second=5):
     """持续负载测试"""
-    print(f"\n=== [测试 3/4] 持续负载测试 ({duration}秒, {clients_per_second} 连接/秒) ===")
+    logger.log(f"\n=== [测试 3/4] 持续负载测试 ({duration}秒, {clients_per_second} 连接/秒) ===")
     
     def client_worker(client_id):
         client = TestClient()
@@ -220,52 +247,57 @@ def sustained_load_test(duration=30, clients_per_second=5):
         
         # 实时显示统计
         with stats['lock']:
-            print(f"运行时间: {time.time() - start_time:.1f}s | "
-                  f"连接: {stats['connections_success']}/{stats['connections_success'] + stats['connections_failed']} | "
-                  f"消息: {stats['messages_success']}/{stats['messages_success'] + stats['messages_failed']}")
+            status_msg = (f"运行时间: {time.time() - start_time:.1f}s | "
+                         f"连接: {stats['connections_success']}/{stats['connections_success'] + stats['connections_failed']} | "
+                         f"消息: {stats['messages_success']}/{stats['messages_success'] + stats['messages_failed']}")
+            logger.log(status_msg)
     
     # 等待最后一批完成
     time.sleep(3)
-    print("✓ 持续负载测试完成")
+    logger.log("✓ 持续负载测试完成")
     return True
 
 def print_final_statistics():
     """打印最终统计结果"""
-    print("\n=== [测试 4/4] 性能统计报告 ===")
+    logger.log("\n=== [测试 4/4] 性能统计报告 ===")
     
     with stats['lock']:
         total_connections = stats['connections_success'] + stats['connections_failed']
         total_messages = stats['messages_success'] + stats['messages_failed']
         
-        print(f"连接统计:")
-        print(f"  成功: {stats['connections_success']}")
-        print(f"  失败: {stats['connections_failed']}")
-        print(f"  成功率: {stats['connections_success']/total_connections*100:.1f}%" if total_connections > 0 else "  成功率: 0%")
+        logger.log(f"连接统计:")
+        logger.log(f"  成功: {stats['connections_success']}")
+        logger.log(f"  失败: {stats['connections_failed']}")
+        logger.log(f"  成功率: {stats['connections_success']/total_connections*100:.1f}%" if total_connections > 0 else "  成功率: 0%")
         
-        print(f"\n消息统计:")
-        print(f"  成功: {stats['messages_success']}")
-        print(f"  失败: {stats['messages_failed']}")
-        print(f"  成功率: {stats['messages_success']/total_messages*100:.1f}%" if total_messages > 0 else "  成功率: 0%")
+        logger.log(f"\n消息统计:")
+        logger.log(f"  成功: {stats['messages_success']}")
+        logger.log(f"  失败: {stats['messages_failed']}")
+        logger.log(f"  成功率: {stats['messages_success']/total_messages*100:.1f}%" if total_messages > 0 else "  成功率: 0%")
         
         if stats['response_times']:
             response_times = stats['response_times']
-            print(f"\n响应时间统计:")
-            print(f"  平均: {statistics.mean(response_times)*1000:.2f}ms")
-            print(f"  中位数: {statistics.median(response_times)*1000:.2f}ms")
-            print(f"  最小: {min(response_times)*1000:.2f}ms")
-            print(f"  最大: {max(response_times)*1000:.2f}ms")
+            logger.log(f"\n响应时间统计:")
+            logger.log(f"  平均: {statistics.mean(response_times)*1000:.2f}ms")
+            logger.log(f"  中位数: {statistics.median(response_times)*1000:.2f}ms")
+            logger.log(f"  最小: {min(response_times)*1000:.2f}ms")
+            logger.log(f"  最大: {max(response_times)*1000:.2f}ms")
             if len(response_times) > 1:
-                print(f"  标准差: {statistics.stdev(response_times)*1000:.2f}ms")
+                logger.log(f"  标准差: {statistics.stdev(response_times)*1000:.2f}ms")
+    
+    # 写入测试结束标记
+    logger.log(f"\n测试结束时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.log(f"{'='*60}\n")
 
 def main():
-    print("Reactor网络库压力测试工具")
-    print("请确保服务器已在127.0.0.1:8888上运行")
-    print("=" * 50)
+    logger.log("Reactor网络库压力测试工具")
+    logger.log("请确保服务器已在127.0.0.1:8888上运行")
+    logger.log("=" * 50)
 
     try:
         # 基础功能测试
         if not basic_functionality_test():
-            print("✗ 基础功能测试失败，终止测试")
+            logger.log("✗ 基础功能测试失败，终止测试")
             sys.exit(1)
         
         # 并发连接测试（适中的数量）
@@ -277,14 +309,14 @@ def main():
         # 打印统计
         print_final_statistics()
         
-        print("\n" + "=" * 50)
-        print("✓✓✓ 所有压力测试完成！")
+        logger.log("\n" + "=" * 50)
+        logger.log("✓✓✓ 所有压力测试完成！")
         
     except KeyboardInterrupt:
-        print("\n用户中断测试")
+        logger.log("\n用户中断测试")
         print_final_statistics()
     except Exception as e:
-        print(f"\n测试过程中出现错误: {e}")
+        logger.log(f"\n测试过程中出现错误: {e}")
         print_final_statistics()
 
 if __name__ == "__main__":

@@ -1,30 +1,38 @@
 流程：
-1. main函数在tcpepoll.cpp中，首先会根据命令行参数ip和port创建一个TcpServer类实例
+1. main函数在tcpepoll.cpp中，首先会根据命令行参数ip和port创建一个TcpServer类实例,同时设置ThreadNum
 2. TcpServer构造函数中创建以下对象：
     1. EventLoop,Socket,Channel,InetAddress,一个map管理所有的TcpConnetion连接
-    2. 同时会初始化这个Socket，进行listen,bind等系统调用
-    3. 给它的Channel设置回调，目前只有readCallback,并调用enableReading，里面还会调用对应的epoll_event的系统调用
+    2. 调用threadPool->start(),里面根据ThreadNum和EventLoopThread->startLoop()创建线程数,
+        EventLoopThread:
+            1. EventLoopThread->startLoop()创建一个新线程,里面在栈上创建一个EventLoop对象
+            2. 调用栈上这个loop->loop(),这就是这个线程里面的EventLoop主循环，不会主动停止，栈对象不销毁
+    3. 同时会初始化这个Socket，进行listen,bind等系统调用
+    4. 给它的Channel设置回调，目前只有readCallback,并调用enableReading，里面还会调用对应的epoll_event的系统调用
+    5. 启动当前TcpServer里面的主EventLoop->loop()，监听事件并分发
 3. main函数继续，先设置上层的业务回调给TcpServer，然后调用TcpServer.start()开始事件循环
-4. TcpServer.start调用它的EventLoop.run()，进行处理系统调用epoll_wait()的返回值
+4. TcpServer.start调用它的主事件循环EventLoop.run()，进行处理系统调用epoll_wait()的返回值
 5. 每个事件封装成Channel类，然后调用每个Channel的handleEvent()
     1. 读事件：
         1. 调用Channel对应的读事件回调，该回调由TcpServer创建该Channel的时候设立，为TcpServer::handleNewConnection()
         2. 强调：此时是首次连接。该回调首先通过TcpServer类里面的Socet获取该新连接客户端的fd，然后创建该客户端的TcpConnection
         3. 把该TcpConnection加入TcpServer类里面的map，确保引用，同时初始化该TcpConnection的回调函数，来自于main的和close相关的
-        4. 进入TcpConnection:
-                1. 构造函数初始化
-                2. TcpServer调用它的connectEstablished()，把读事件的回调函数更新为TcpConnection::handleRead()
-                    把它的channel加入内核epoll红黑树等操作
-        5. 上面是首次连接，现在已经连接了，并且再次进入Channel的handleEvent，就会进入更后写回调函数TcpConnection::handleRead()
-        6. 通过TcpConnection的Buffer成员和Socket处理信息，同时会处理要关闭的情况
-        7. 关闭TcpConnection:
+        4. 调用该TcpServer的threadPool_->getNextLoop()，就是获得ioLoop，把这个EventLoop线程给这个新的TcpConnection
+        EventLoop有成员std::vector<std::function<void()>> pendingFuncs_，调用
+        ioLoop->queueInLoop([conn]() { conn->connectEstablished(); });把这个函数加入到这个vector里面等待调用
+        "目前暂时把epoll_wait设置成有timeout的，确保不会EventLoop::loop()不会永远阻塞，以后会加入eventFd功能"
+        5. 进入TcpConnection:
+            1. 构造函数初始化
+            2. 等待它对应的EventLoopthread调用它的pendingFuncs_里面的connectEstablished()，会把读事件的回调函数更新为TcpConnection::handleRead()，把它的channel加入内核epoll红黑树等操作
+        6. 上面是首次连接，现在已经连接了，并且再次进入Channel的handleEvent，就会进入更后写回调函数TcpConnection::handleRead()
+        7. 通过TcpConnection的Buffer成员和Socket处理信息，同时会处理要关闭的情况
+        8. 关闭TcpConnection:
             1. 补充，上面的TcpServer创建该TcpConnection时候会设置closeCallback，也就是TcpServer::removeConnection
             2. 两种情况关闭，1是TcpConnection::handleRead()里面，2是Channel::handleEvent，都会调用这个closeCallback
             3. 关闭流程大概就是会显示的关闭fd，调用epoll_ctl和它DEL参数宏，还有把它从所属的TcpServer里面的map移除。
             最后当TcpConnection的引用次数为0时候，自动销毁所有内存，无内存泄漏
     2. 写事件：
         ...
-6.
+6. EventLoop::loop()继续，会调用EventLoop::doPendingFunctions()去执行
 
 
 

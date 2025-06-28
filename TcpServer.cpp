@@ -28,10 +28,9 @@ TcpServer::TcpServer(const std::string &ip, const uint16_t port)
   listensock_->setKeepAlive(true);
 
   // 为监听socket创建Channel
-  listen_channel_->setReadCallback([this]() { handleNewConnection(); });
-
   listen_channel_->setWriteCallback([this]() { handleWrite(); });
-  // 启用读事件
+  // 设置监听socket的读回调
+  listen_channel_->setReadCallback([this]() { handleNewConnection(); });
   listen_channel_->enableReading();
 }
 
@@ -51,9 +50,6 @@ void TcpServer::setThreadNum(int numThreads) {
 void TcpServer::start() {
   // 启动线程池
   threadPool_->start();
-  // 设置监听socket的读回调
-  listen_channel_->setReadCallback([this]() { handleNewConnection(); });
-  listen_channel_->enableReading();
   // 启动事件循环
   eventLoop_->loop();
 }

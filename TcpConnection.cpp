@@ -41,19 +41,14 @@ void TcpConnection::connectDestroyed() {
 void TcpConnection::send(const std::string &buf) {
   if (state_ == kConnected) {
     if (loop_->isInLoopThread()) {
-      std::cout << "TcpConnection::send() in loop thread" << std::endl;
       sendInLoop(buf);
     } else {
-      std::cout << "TcpConnection::send() not in loop thread" << std::endl;
-      loop_->queueInLoop([this, buf]() { send(buf); });
+      loop_->queueInLoop([this, buf]() { sendInLoop(buf); });
     }
   }
 }
 
 void TcpConnection::sendInLoop(const std::string &buf) {
-  // if (state_ == kConnected) {
-  //   loop_->queueInLoop([this, buf]() { send(buf); });
-  // }
   ::send(socket_->getFd(), buf.c_str(), buf.size(), 0);
   log("Sent " + std::to_string(buf.size()) + " bytes to client", "handleData");
 }
