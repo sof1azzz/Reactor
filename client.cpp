@@ -240,6 +240,7 @@ int main(int argc, char *argv[]) {
     }
     std::cout << "Received message: " << message << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(1));
+    break;
   }
 
   return 0;

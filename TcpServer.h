@@ -57,4 +57,5 @@ private:
   CloseCallback closeCallback_;
   std::map<std::string, std::shared_ptr<TcpConnection>> connections_;
   InetAddress server_addr_;
+  std::mutex connections_mutex_;
 };

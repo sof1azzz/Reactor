@@ -22,7 +22,8 @@ void logError(const std::string &message, const std::string &func,
 }
 
 Channel::Channel(int fd, Epoll *epoll)
-    : fd_(fd), epoll_(epoll), inEpoll_(false), events_(0), readEvent_(0) {}
+    : fd_(fd), epoll_(epoll), inEpoll_(false), events_(0), revents_(0) {
+}
 
 Channel::~Channel() {}
 
@@ -34,6 +35,7 @@ void Channel::useEdgeTrigger(bool on) {
   } else {
     events_ &= ~EPOLLET;
   }
+  epoll_->updateChannel(this);
 }
 
 void Channel::enableReading() {
@@ -55,36 +57,24 @@ bool Channel::isWriting() const { return events_ & EPOLLOUT; }
 
 void Channel::setInEpoll(bool on) { inEpoll_ = on; }
 
-void Channel::setReadEvent(bool on) {
-  if (on) {
-    readEvent_ |= EPOLLIN;
-  } else {
-    readEvent_ &= ~EPOLLIN;
-  }
-  epoll_->updateChannel(this);
-}
+void Channel::setReadEvent(uint32_t rev) { revents_ = rev; }
 
 bool Channel::isInEpoll() const { return inEpoll_; }
 
 uint32_t Channel::getEvents() const { return events_; }
 
-uint32_t Channel::getReadEvent() const { return readEvent_; }
-
 void Channel::handleEvent() {
-  if (events_ & EPOLLRDHUP) { // 客户端关闭连接
+  if (revents_ & EPOLLRDHUP) { // 客户端关闭连接
     log("Client disconnected", __func__);
     closeCallback_();
-    // 不要在这里关闭fd，调用回调去tcpconnection里面
-    // close(fd_);
-    // epoll_->delFd(fd_);
     return; // 客户端关闭连接，不需要处理其他事件
   }
 
-  if (events_ & (EPOLLIN | EPOLLPRI)) { // 读事件
+  if (revents_ & (EPOLLIN | EPOLLPRI)) { // 读事件
     if (readCallback_) {
       readCallback_(); // 调用设置的回调函数，能处理第一次连接和后续数据通信
     }
-  } else if (events_ & EPOLLOUT) { // 写事件
+  } else if (revents_ & EPOLLOUT) { // 写事件
     if (writeCallback_) {
       writeCallback_(); // 调用设置的回调函数，能处理第一次连接和后续数据通信
     }
@@ -95,7 +85,7 @@ void Channel::handleEvent() {
 
 void Channel::disableAll() {
   events_ = kNoneEvent;
-  readEvent_ = kNoneEvent;
+  revents_ = kNoneEvent;
   epoll_->updateChannel(this);
 }
 

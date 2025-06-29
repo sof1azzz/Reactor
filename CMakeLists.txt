@@ -36,3 +36,9 @@ add_executable(client
 )
 
 target_link_libraries(client pthread)
+
+add_custom_target(tests
+  COMMAND ${CMAKE_SOURCE_DIR}/tests/test_client.py
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Running Python test"
+)

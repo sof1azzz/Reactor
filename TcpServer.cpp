@@ -61,6 +61,7 @@ concept IsTcpConnRef =
 
 // 处理新连接的回调函数。并设置客户端数据处理回调
 void TcpServer::handleNewConnection() {
+  // 获取客户端地址
   InetAddress peerAddr;
   int connfd = listensock_->accept(peerAddr);
   if (connfd < 0) {
@@ -87,24 +88,26 @@ void TcpServer::handleNewConnection() {
   conn->setCloseCallback([this]<IsTcpConnRef T>(T &&PH1) {
     removeConnection(std::forward<T>(PH1));
   });
-  // 连接建立
 
-  // 要改
+  // 在I/O线程中调用connectEstablished
   ioLoop->queueInLoop([conn]() { conn->connectEstablished(); });
-  // conn->connectEstablished();
+
   // 存到map中
-  connections_[conn->name()] = conn;
+  {
+    std::lock_guard<std::mutex> lock(connections_mutex_);
+    connections_[conn->name()] = conn;
+  }
 }
 
 void TcpServer::removeConnection(const std::shared_ptr<TcpConnection> &conn) {
   log("Removing connection: " + conn->name(), "removeConnection");
 
+  // 在I/O线程中调用connectDestroyed
+  conn->getLoop()->queueInLoop([conn]() { conn->connectDestroyed(); });
   // 从map中移除连接
-  connections_.erase(conn->name());
-  conn->connectDestroyed();
-
-  if (connectionCallback_) {
-    connectionCallback_(conn);
+  {
+    std::lock_guard<std::mutex> lock(connections_mutex_);
+    connections_.erase(conn->name());
   }
 }
 

@@ -23,7 +23,7 @@ public:
   void wakeup();
 
 private:
-  void handleRead(); // for wakeup
+  void handleWakeup(); // for wakeup
   void doPendingFunctions();
 
   std::unique_ptr<Epoll> epoll_;
@@ -31,4 +31,6 @@ private:
   std::vector<std::function<void()>> pendingFuncs_;
   std::mutex mutex_;
   const std::thread::id threadId_;
+  int wakeupFd_;
+  std::unique_ptr<Channel> wakeupChannel_;
 };

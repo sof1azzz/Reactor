@@ -1,8 +1,8 @@
 #include "Epoll.h"
 #include "Channel.h"
-#include "Socket.h"
 #include <asm-generic/errno-base.h>
 #include <asm-generic/errno.h>
+#include <cassert>
 #include <cerrno>
 #include <cstring>
 #include <strings.h>
@@ -25,6 +25,7 @@ void Epoll::updateChannel(Channel *channel) {
   ev.data.ptr = channel;
   ev.events = channel->getEvents();
 
+  // 注册事件
   if (channel->isInEpoll()) {
     if (epoll_ctl(epollfd_, EPOLL_CTL_MOD, channel->getFd(), &ev) == -1) {
       logError(strerror(errno), __func__);
@@ -39,15 +40,17 @@ void Epoll::updateChannel(Channel *channel) {
 
 void Epoll::poll(std::vector<Channel *> &channels) {
   while (true) {
-    int nfds = epoll_wait(epollfd_, events_.data(), events_.size(), 10);
+    int nfds = epoll_wait(epollfd_, events_.data(), events_.size(), -1);
     if (nfds < 0) {
       if (errno == EINTR)
         continue;
-      // error
-      break;
+      logError(strerror(errno), __func__);
+      // 理论上不会执行
+      assert(false);
     }
     if (nfds == 0) {
-      break;
+      // timeout 为 -1 时，这里理论上不会执行
+      assert(false);
     }
     for (int i = 0; i < nfds; ++i) {
       Channel *ch = (Channel *)events_[i].data.ptr;

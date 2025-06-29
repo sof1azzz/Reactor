@@ -32,10 +32,9 @@ public:
   void disableWriting();
   bool isWriting() const;
   void setInEpoll(bool on);
-  void setReadEvent(bool on);
+  void setReadEvent(uint32_t rev);
   bool isInEpoll() const;
   uint32_t getEvents() const;
-  uint32_t getReadEvent() const;
   void handleEvent();
   void setReadCallback(std::function<void()> callback);
   void setCloseCallback(std::function<void()> callback);
@@ -52,7 +51,7 @@ private:
   Epoll *epoll_;
   bool inEpoll_;
   uint32_t events_;
-  uint32_t readEvent_;
+  uint32_t revents_;
   std::function<void()> readCallback_;
   std::function<void()> closeCallback_;
   std::function<void()> writeCallback_;

@@ -23,15 +23,8 @@ void onMessage(const TcpConnectionPtr &conn, Buffer &buf) {
   std::cout << "onMessage(): received " << msg.size()
             << " bytes from connection [" << conn->name() << "]: " << msg
             << std::endl;
-
-  // 正常情况：在I/O线程中直接发送
-  // conn->send(msg); // 回显
-
   // 测试跨线程调用：从另一个线程发送
-  std::thread([conn, msg]() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    conn->send(msg);
-  }).detach();
+  std::thread([conn, msg]() { conn->send(msg); }).detach();
 }
 
 // 3. 数据发送完毕的回调

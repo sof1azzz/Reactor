@@ -21,8 +21,8 @@ void TcpConnection::connectEstablished() {
   channel_->setCloseCallback([this]() { handleClose(); });
   channel_->setWriteCallback([this]() { handleWrite(); });
   // 这里面会调用epoll_ctl(EPOLL_CTL_ADD)，把fd加入到epoll红黑树里面
-  channel_->enableReading();
   channel_->useEdgeTrigger(true);
+  channel_->enableReading();
   // 第一次调用时候进入这个回调，这个回调来自main
   // 以后直接调用handleRead()，就是下面的handleRead()回调
   connectionCallback_(shared_from_this());
@@ -54,15 +54,20 @@ void TcpConnection::sendInLoop(const std::string &buf) {
 }
 
 void TcpConnection::handleRead() {
-  ssize_t bytes_read = inputBuffer_.readFd(socket_->getFd());
-  if (bytes_read > 0) {
-    log("Read " + std::to_string(bytes_read) + " bytes from client",
-        "handleData");
-    messageCallback_(shared_from_this(), inputBuffer_);
-  } else if (bytes_read == 0) {
-    handleClose();
-  } else {
-    handleError();
+  // 循环读取数据，直到读取到0，或者读取到错误
+  while (true) {
+    ssize_t bytes_read = inputBuffer_.readFd(socket_->getFd());
+    if (bytes_read > 0) {
+      log("Read " + std::to_string(bytes_read) + " bytes from client",
+          "handleData");
+      messageCallback_(shared_from_this(), inputBuffer_);
+    } else if (bytes_read == 0) {
+      handleClose();
+      break;
+    } else {
+      handleError();
+      break;
+    }
   }
 }
 

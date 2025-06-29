@@ -16,16 +16,19 @@ import os
 
 class TestLogger:
     """测试日志记录器"""
-    def __init__(self, log_file="reactor_test_results.log"):
-        self.log_file = log_file
-        self.lock = threading.Lock()
+    def __init__(self, log_dir="tests", test_name="pressure_test"):
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        log_filename = f"{timestamp}_{test_name}.log"
         
-        # 确保日志目录存在
-        os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+        os.makedirs(log_dir, exist_ok=True)
+        
+        self.log_file = os.path.join(log_dir, log_filename)
+        self.lock = threading.Lock()
         
         # 写入测试开始标记
         self.log(f"\n{'='*60}")
         self.log(f"测试开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        self.log(f"日志文件: {os.path.abspath(self.log_file)}")
         self.log(f"{'='*60}")
     
     def log(self, message):
@@ -37,7 +40,7 @@ class TestLogger:
                 f.flush()  # 确保立即写入磁盘
 
 # 全局日志器
-logger = TestLogger("tests/reactor_test_results.log")
+logger = TestLogger(log_dir="tests", test_name="pressure_test")
 
 class TestClient:
     """一个封装了TCP连接、发送、接收和关闭操作的客户端类。"""
@@ -304,7 +307,7 @@ def main():
         concurrent_connections_test(num_clients=50)
         
         # 持续负载测试
-        sustained_load_test(duration=30, clients_per_second=3)
+        sustained_load_test(duration=30, clients_per_second=10)
         
         # 打印统计
         print_final_statistics()
