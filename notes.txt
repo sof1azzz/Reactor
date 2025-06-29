@@ -19,6 +19,9 @@
         4. 调用该TcpServer的threadPool_->getNextLoop()，就是获得ioLoop，把这个EventLoop线程给这个新的TcpConnection
         EventLoop有成员std::vector<std::function<void()>> pendingFuncs_，调用
         ioLoop->queueInLoop([conn]() { conn->connectEstablished(); });把这个函数加入到这个vector里面等待调用
+        EventLoop有eventFd成员，用来解决阻塞问题。创建eventloop对应的一个channel,把它注册到当前eventloop类的epoll里面，并初始化它的写回调。它的回调是EventLoop->handleWakeup。这个eventfd和channel存在的意义就是防止在epoll->poll无限阻塞等待新事件，直接导致eventloop->loop无限等待，不能去处理pendingfunctions。
+        它的运作是eventloop->queueInLoop如果发现当前eventloop->isInLoopThread是false，就调用eventloop->wakeup。
+        这个wakeup里面会给这个eventfd写一个任意的东西(该项目是一个uint64_t)这样就会让epoll->poll的event_wait不再阻塞，就能继续实行，然后就能去执行eventloop->loop的下一步，执行pendingfunctions。达到了不会主动去轮询(之前的暂时方法)，而是外部对pendingfunctions做修改，自动去wakeup执行
         "目前暂时把epoll_wait设置成有timeout的，确保不会EventLoop::loop()不会永远阻塞，以后会加入eventFd功能"
         5. 进入TcpConnection:
             1. 构造函数初始化
