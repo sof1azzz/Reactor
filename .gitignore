@@ -1,4 +1,5 @@
 # 忽略 build 目录
 /build/
 
-/tests/tests/
+# 忽略 tests 目录
+/tests/
