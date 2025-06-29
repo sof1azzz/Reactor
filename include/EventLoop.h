@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Epoll.h"
+#include "EpollPoller.h"
+#include "Poller.h"
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -17,7 +18,7 @@ public:
   void loop();
   void quit();
 
-  Epoll *getEpoll() const;
+  Poller *getPoller() const;
   bool isInLoopThread() const;
   void queueInLoop(std::function<void()> func);
   void wakeup();
@@ -26,7 +27,7 @@ private:
   void handleWakeup(); // for wakeup
   void doPendingFunctions();
 
-  std::unique_ptr<Epoll> epoll_;
+  std::unique_ptr<Poller> poller_;
   bool quit_;
   std::vector<std::function<void()>> pendingFuncs_;
   std::mutex mutex_;

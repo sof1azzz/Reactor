@@ -1,5 +1,5 @@
-#include "Epoll.h"
-#include "Channel.h"
+#include "../include/EpollPoller.h"
+#include "../include/Channel.h"
 #include <asm-generic/errno-base.h>
 #include <asm-generic/errno.h>
 #include <cassert>
@@ -38,7 +38,7 @@ void Epoll::updateChannel(Channel *channel) {
   }
 }
 
-void Epoll::poll(std::vector<Channel *> &channels) {
+void Epoll::poll(std::vector<Channel *> &activeChannels, int timeoutMs) {
   while (true) {
     int nfds = epoll_wait(epollfd_, events_.data(), events_.size(), -1);
     if (nfds < 0) {
@@ -55,7 +55,7 @@ void Epoll::poll(std::vector<Channel *> &channels) {
     for (int i = 0; i < nfds; ++i) {
       Channel *ch = (Channel *)events_[i].data.ptr;
       ch->setReadEvent(events_[i].events);
-      channels.push_back(ch);
+      activeChannels.push_back(ch);
     }
     if (nfds == (int)events_.size()) {
       events_.resize(events_.size() * 2);
@@ -64,8 +64,11 @@ void Epoll::poll(std::vector<Channel *> &channels) {
   }
 }
 
-void Epoll::delFd(int fd) {
-  if (epoll_ctl(epollfd_, EPOLL_CTL_DEL, fd, nullptr) == -1) {
-    logError(strerror(errno), __func__);
+void Epoll::removeChannel(Channel *channel) {
+  if (channel->isInEpoll()) {
+    if (epoll_ctl(epollfd_, EPOLL_CTL_DEL, channel->getFd(), nullptr) == -1) {
+      logError(strerror(errno), __func__);
+    }
+    channel->setInEpoll(false);
   }
 }

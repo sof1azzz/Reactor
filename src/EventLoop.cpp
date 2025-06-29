@@ -1,14 +1,14 @@
-#include "EventLoop.h"
-#include "Channel.h"
+#include "../include/Channel.h"
+#include "../include/EventLoop.h"
 #include <memory>
 #include <sys/eventfd.h>
 #include <vector>
 
 EventLoop::EventLoop()
-    : epoll_(std::make_unique<Epoll>()), quit_(false),
+    : poller_(std::make_unique<Epoll>()), quit_(false),
       threadId_(std::this_thread::get_id()),
       wakeupFd_(eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)),
-      wakeupChannel_(std::make_unique<Channel>(wakeupFd_, epoll_.get())) {
+      wakeupChannel_(std::make_unique<Channel>(wakeupFd_, poller_.get())) {
   if (wakeupFd_ < 0) {
     logError("Failed to create wakeupFd", __func__);
   }
@@ -18,13 +18,13 @@ EventLoop::EventLoop()
 
 EventLoop::~EventLoop() {}
 
-Epoll *EventLoop::getEpoll() const { return epoll_.get(); }
+Poller *EventLoop::getPoller() const { return poller_.get(); }
 
 void EventLoop::loop() {
   while (!quit_) {
     std::vector<Channel *> channels;
 
-    epoll_->poll(channels);
+    poller_->poll(channels);
 
     for (auto &channel : channels) {
       channel->handleEvent();

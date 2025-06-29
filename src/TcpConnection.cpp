@@ -1,4 +1,4 @@
-#include "TcpConnection.h"
+#include "../include/TcpConnection.h"
 #include <cstring>
 
 TcpConnection::TcpConnection(EventLoop *loop, const std::string &name,
@@ -6,7 +6,7 @@ TcpConnection::TcpConnection(EventLoop *loop, const std::string &name,
                              const InetAddress &peerAddr)
     : loop_(loop), name_(name), state_(kDisconnected),
       socket_(std::make_unique<Socket>(connfd)),
-      channel_(std::make_unique<Channel>(connfd, loop_->getEpoll())),
+      channel_(std::make_unique<Channel>(connfd, loop->getPoller())),
       localAddr_(localAddr), peerAddr_(peerAddr), connectionCallback_(nullptr),
       messageCallback_(nullptr), writeCompleteCallback_(nullptr),
       closeCallback_(nullptr), inputBuffer_(), outputBuffer_() {
@@ -35,7 +35,7 @@ void TcpConnection::connectDestroyed() {
 
     connectionCallback_(shared_from_this());
   }
-  loop_->getEpoll()->delFd(channel_->getFd());
+  loop_->getPoller()->removeChannel(channel_.get());
 }
 
 void TcpConnection::send(const std::string &buf) {

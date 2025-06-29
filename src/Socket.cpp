@@ -1,5 +1,5 @@
-#include "Socket.h"
-#include "InetAddress.h"
+#include "../include/InetAddress.h"
+#include "../include/Socket.h"
 #include <cerrno>
 #include <cstdio>
 #include <cstring>

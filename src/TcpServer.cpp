@@ -1,10 +1,10 @@
-#include "TcpServer.h"
-#include "Channel.h"
-#include "EventLoop.h"
-#include "EventLoopThreadPool.h"
-#include "InetAddress.h"
-#include "Socket.h"
-#include "TcpConnection.h"
+#include "../include/TcpServer.h"
+#include "../include/Channel.h"
+#include "../include/EventLoop.h"
+#include "../include/EventLoopThreadPool.h"
+#include "../include/InetAddress.h"
+#include "../include/Socket.h"
+#include "../include/TcpConnection.h"
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -16,7 +16,7 @@ TcpServer::TcpServer(const std::string &ip, const uint16_t port)
                                                         4 /*numThreads*/)),
       ip_(ip), port_(port), listensock_(std::make_unique<Socket>()),
       listen_channel_(std::make_unique<Channel>(listensock_->getFd(),
-                                                eventLoop_->getEpoll())),
+                                                eventLoop_->getPoller())),
       server_addr_(ip, port), connectionCallback_(nullptr),
       messageCallback_(nullptr), writeCompleteCallback_(nullptr),
       connections_() {

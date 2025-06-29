@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Epoll.h"
+#include "Poller.h"
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -16,13 +16,11 @@ void logError(const std::string &message, const std::string &func,
               const std::experimental::source_location &location =
                   std::experimental::source_location::current());
 
-class Epoll;
-class Socket;
-class InetAddress;
+class Poller;
 
 class Channel {
 public:
-  Channel(int fd, Epoll *epoll);
+  Channel(int fd, Poller *epoll);
   ~Channel();
 
   int getFd() const;
@@ -48,7 +46,7 @@ public:
 
 private:
   int fd_;
-  Epoll *epoll_;
+  Poller *epoll_;
   bool inEpoll_;
   uint32_t events_;
   uint32_t revents_;

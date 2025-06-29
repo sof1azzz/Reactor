@@ -1,7 +1,8 @@
-#include "Channel.h"
+#include "../include/Channel.h"
 #include <cstring>
 #include <experimental/source_location>
 #include <iostream>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -21,7 +22,7 @@ void logError(const std::string &message, const std::string &func,
   log("Error: " + message, func, location);
 }
 
-Channel::Channel(int fd, Epoll *epoll)
+Channel::Channel(int fd, Poller *epoll)
     : fd_(fd), epoll_(epoll), inEpoll_(false), events_(0), revents_(0) {
 }
 
@@ -45,11 +46,6 @@ void Channel::enableReading() {
 
 void Channel::enableWriting() {
   events_ |= EPOLLOUT;
-  epoll_->updateChannel(this);
-}
-
-void Channel::disableWriting() {
-  events_ &= ~EPOLLOUT;
   epoll_->updateChannel(this);
 }
 
